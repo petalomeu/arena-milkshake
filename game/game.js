@@ -82,6 +82,15 @@ sprites[0]={
  kick:[pedroKnee,pedroHD('kick'),pedroHD('kick'),pedroKnee],air:[pedroKnee,pedroHD('kick')],
  charge:[pedroHD('bull')],special:[pedroHD('horn-ready'),pedroHD('horn-blow'),pedroHD('horn-blow'),pedroHD('horn-ready')]
 };
+const maykimHD=name=>loadFrame('2-hd-'+name);
+const maykimIdle=maykimHD('idle'),maykimGuard=maykimHD('guard');
+sprites[2]={idle:[maykimIdle],walk:[maykimHD('walk'),maykimIdle],run:[maykimHD('run'),maykimHD('walk')],
+ punch:[maykimGuard,maykimHD('punch'),maykimIdle],kick:[maykimGuard,maykimHD('kick'),maykimIdle],
+ guard:[maykimGuard],hurt:[maykimHD('hurt')],fall:[maykimHD('fall')],rise:[maykimGuard,maykimIdle],
+ jump:[maykimHD('kick')],crouch:[maykimGuard],dash:[maykimHD('bike')],special:[maykimIdle,maykimHD('punch'),maykimIdle]};
+const maykimBikePedro=maykimHD('bike-pedro');
+const maykimTrucks=[maykimHD('truck'),maykimHD('truck-tip')];
+function maykimBikeFor(a,b){return b.kind===0 ? sprites[2].dash[0] : maykimBikePedro;}
 const bull = loadFrame('bull');
 const ambulance = loadFrame('4-ambulance-0');
 const nurses = [0,1,2].map(i=>loadFrame('4-nurse-'+i));
@@ -116,11 +125,11 @@ const roster = [
   {name:'Pedro — Serjão Berranteiro',subtitle:'Campeão da Roça',portrait:'frames/0-portrait.png',passive:'Campeão da Roça: +30% de dano contra oponentes ou habilidades femininas; −30% no Adélia.', color:'#ffca72', crop:[105,165,390,415], keys:['KeyA','KeyD','KeyW','KeyS','KeyF','KeyG','KeyH','KeyR']},
   {name:'Milk Down', color:'#ff96ca', crop:[447,321,335,385], keys:['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyJ','KeyK','KeyL','KeyU']}
 ];
-const characters = [...roster,{name:'Maycon',color:'#cda3ff'},{name:'Caleca',subtitle:'O Surfista Prateado',color:'#d8ebff'},{name:'Leandro Marçal',color:'#ffb1ad'},{name:'Pupinho',color:'#d6f77c'},{name:'Fabio Toscana',color:'#8fc8ff'},{name:'Angélica do Mounjaro',color:'#ff9def'},{name:'Gabriel Soneca do Almoço',color:'#d1b0ff'},{name:'Orsi Chefinho',color:'#ffd797'},{name:'Matheus the Printer',color:'#b6efbc'},{name:'Paulo Feliz',color:'#ffe28b'},{name:'CyberAlfredo',color:'#7ae9ff'},{name:'Lucreci do Pataco',subtitle:'Cabeção Natural',color:'#31c9f5',passive:'Causa até 40% mais dano contra campeões que evoluem, ficam maiores ou entram em forma ampliada.',portrait:'frames/13-portrait.png'},{name:'DêDêw',subtitle:'Punhos fortes',color:'#ffc477',passive:'Mão gradona: +15% de força. DêDêwzinhu aumenta a força e a velocidade dos golpes por 3 segundos.',portrait:'frames/14-portrait.png'}];
+const characters = [...roster,{name:'Maykim do Grau',subtitle:'O Maior Campeão',color:'#cda3ff'},{name:'Caleca',subtitle:'O Surfista Prateado',color:'#d8ebff'},{name:'Leandro Marçal',color:'#ffb1ad'},{name:'Pupinho',color:'#d6f77c'},{name:'Fabio Toscana',color:'#8fc8ff'},{name:'Angélica do Mounjaro',color:'#ff9def'},{name:'Gabriel Soneca do Almoço',color:'#d1b0ff'},{name:'Orsi Chefinho',color:'#ffd797'},{name:'Matheus the Printer',color:'#b6efbc'},{name:'Paulo Feliz',color:'#ffe28b'},{name:'CyberAlfredo',color:'#7ae9ff'},{name:'Lucreci do Pataco',subtitle:'Cabeção Natural',color:'#31c9f5',passive:'Causa até 40% mais dano contra campeões que evoluem, ficam maiores ou entram em forma ampliada.',portrait:'frames/13-portrait.png'},{name:'DêDêw',subtitle:'Punhos fortes',color:'#ffc477',passive:'Mão gradona: +15% de força. DêDêwzinhu aumenta a força e a velocidade dos golpes por 3 segundos.',portrait:'frames/14-portrait.png'}];
 characters.forEach((character,kind)=>{character.portrait='frames/'+kind+'-portrait.webp';});
 characters[1].subtitle='O Campeão Amoroso';
-characters[1].passive='Amoroso: acertar golpes concede 15% de defesa e regenera 2 de vida/s por 3 segundos, sem acumular.';
-const specials = [['Matador de Onça','Foon'],['Abraço Down','Gorfinho de Morango'],['Granada de Fumaça','Avanço Tático'],['Brilho da Careca','Surfista Prateado'],['Equipe de Socorro','Comedor de Açúcar!'],['Peido Infectante','Cutucada na Orelha'],['Toscana Desenrolada','Galinhas da Angola'],['Seringa da Loucura','Pílula da Regeneração'],['Dorme Neném','Hora do Cochilo'],['Invocação da Fisioterapeuta','Queijo Gorfado'],['Ovo Imprimir em','SuperEnxaqueca'],['Golpe da Felicidade','Investida da Felicidade'],['Poder dos Tablets','Taco de Beiseball'],['Molho de pimenta','Investida do Pataco'],['Esguicho do café','DêDêwzinhu']];
+characters[1].passive='Amoroso: acertar golpes concede 15% de defesa por 3 segundos. Só o Abraço Down recupera 2 de vida ao acertar.';
+const specials = [['Matador de Onça','Foon'],['Abraço Down','Gorfinho de Morango'],['Investida do Grau','Tio Patinhas'],['Brilho da Careca','Surfista Prateado'],['Equipe de Socorro','Comedor de Açúcar!'],['Peido Infectante','Cutucada na Orelha'],['Toscana Desenrolada','Galinhas da Angola'],['Seringa da Loucura','Pílula da Regeneração'],['Dorme Neném','Hora do Cochilo'],['Invocação da Fisioterapeuta','Queijo Gorfado'],['Ovo Imprimir em','SuperEnxaqueca'],['Golpe da Felicidade','Investida da Felicidade'],['Poder dos Tablets','Taco de Beiseball'],['Molho de pimenta','Investida do Pataco'],['Esguicho do café','DêDêwzinhu']];
 const picks = [0,1];
 const locked = [false,false];
 const cardGroups = [...document.querySelectorAll('.fighter-cards')];
@@ -148,8 +157,7 @@ function syncDeafnessAudio(){
 function updateDownStatuses(dt){
  for(const a of fighters){
   a.slow=Math.max(0,(a.slow||0)-dt);a.frozen=Math.max(0,(a.frozen||0)-dt);
-  const active=Math.min(dt,a.affection||0);a.affection=Math.max(0,(a.affection||0)-dt);
-  if(a.kind===1 && a.hp>0 && active>0)a.hp=Math.min(100,a.hp+active*2);
+  a.affection=Math.max(0,(a.affection||0)-dt);
  }
 }
 function updatePedro(dt){
@@ -363,11 +371,11 @@ function cooldownFor(a,slot) {
 }
 
 const specialEffectSlots={
-  'strawberry-spit':2,'down-hearts':1,'foon-wave':2,rescue:1,chocolate:2,gas:1,teleport:2,toscana:1,'guinea-fowl':2,
+  'money-truck':2,'strawberry-spit':2,'down-hearts':1,'foon-wave':2,rescue:1,chocolate:2,gas:1,teleport:2,toscana:1,'guinea-fowl':2,
   blanket:1,pillow:2,physio:1,cheese:2,print:1,'joy-heart':2,'tablet-ship':1,tablet:1,battery:2,'tablet-blast':2,'lucreci-fire':1,'lucreci-money':2,'dedew-coffee':1
 };
 const ongoingSpecialStates=[
-  [['charge'],[]], [[],[]], [[],['charge']], [[],['charge']],
+  [['charge'],[]], [[],[]], [['charge'],[]], [[],['charge']],
   [[],[]], [[],[]], [[],[]], [['frenzy'],['regen','blood']],
   [['bedWalk'],['nap']], [[],[]], [[],['migraineTicks','migrainePulse']], [[],['charge']], [[],[]], [[],[]], [[],['baby']]
 ];
@@ -558,13 +566,11 @@ function attack(a,b,slot) {
     }
   } else if (a.kind === 2) {
     if (slot === 1) {
-      a.label = 'GRANADA DE FUMAÇA';
-      playClip('mayconPunch');
-      if (close && gap < 245) specialHit(a,b,1,10,110,.95);
+      a.label = 'INVESTIDA DO GRAU';
+      a.action=a.actionDuration=.65;playClip('mayconDash');beginCharge(a);
     } else {
-      a.label = 'AVANÇO TÁTICO';
-      playClip('mayconDash');
-      beginCharge(a);
+      a.label = 'TIO PATINHAS';a.action=a.actionDuration=.72;
+      sound('impact');effects.push({kind:'money-truck',owner:a.i,x:b.x,y:ground,face:a.face,time:0,hit:false});
     }
   } else if (slot === 1) {
     a.label = 'ABRAÇO DOWN';
@@ -815,7 +821,7 @@ function cpuSpecialRange(a,b,gap){
   switch(a.kind){
     case 0:return [gap>100 && gap<550,gap<380];
     case 1:return [gap<115,gap<380];
-    case 2:return [gap<360,gap>140 && gap<650];
+    case 2:return [gap>100 && gap<560,gap<700];
     case 3:return [gap<340,gap>145 && gap<650];
     case 4:return [gap<650,gap<690];
     case 5:return [gap<250,gap<530];
@@ -896,7 +902,7 @@ function update(dt) {
     b.x -= (gap-a.face*43)*Math.min(1,dt*18);
     b.face = -a.face;
     if (embrace.time >= .58) {
-      if(specialHit(a,b,1,20,170,.28,true)){b.slow=2;holdSpecial(a,1,'slow');}
+      if(specialHit(a,b,1,20,170,.28,true)){b.slow=2;if(a.hp>0)a.hp=Math.min(100,a.hp+2);holdSpecial(a,1,'slow');}
       effects.push({kind:'down-hearts',owner:a.i,x:b.x,y:b.y,face:a.face,time:0});
       sound('impact');
       embrace = null;
@@ -950,8 +956,8 @@ function update(dt) {
         effects.push({kind:'joy-heart',owner:a.i,x,y:a.y,face:Math.sign(b.x-x)||a.face,time:0,hit:false});
       }
       if (a.kind!==11 && distance>0 && !a.chargedHit && Math.abs(a.x-b.x)<110 && b.y>ground-68) {
-        const landed=specialHit(a,b,a.kind===0 ? 1 : 2,a.kind===3 ? 24 : 22,425,.5);
-        if(a.kind===0 && landed){b.tumble=.65;b.vy=-220;holdSpecial(a,1,'tumble');}
+        const landed=specialHit(a,b,a.kind===0 || a.kind===2 ? 1 : 2,a.kind===3 ? 24 : 22,425,.5);
+        if((a.kind===0 || a.kind===2) && landed){b.tumble=.65;b.vy=-220;holdSpecial(a,1,'tumble');}
         a.chargedHit = true;
       }
     } else if (!a.stun && !a.guardBreak && !isDefending(a)) {
@@ -1101,12 +1107,21 @@ function updateEffects(dt) {
   for (const effect of effects) {
     const old=effectPosition(effect);
     effect.time+=dt;
+    if(effect.kind==='money-truck'){
+      const a=fighters[effect.owner],b=fighters[1-effect.owner];
+      if(!effect.hit && effect.time>=.70 && effect.time<1.25 && b.hp && Math.abs(b.x-effect.x)<90 && b.y>ground-220){
+        if(specialHit({...a,face:effect.face},b,2,20,80,.8))holdSpecial(a,2,'stun');
+        effect.hit=true;
+      }
+      continue;
+    }
     if(effect.kind==='down-hearts')continue;
     if(effect.kind==='strawberry-spit'){
       const a=fighters[effect.owner],b=fighters[1-effect.owner];
       if(effect.time<.25)continue;
-      const oldX=effect.x+effect.face*(35+Math.max(0,effect.time-dt-.25)*640);
-      const x=effect.x+effect.face*(35+Math.max(0,effect.time-.25)*640);
+      if(!effect.released){effect.released=true;effect.x=a.x;effect.y=a.y;effect.face=a.face;}
+      const oldX=effect.x+effect.face*(43+Math.max(0,effect.time-dt-.25)*640);
+      const x=effect.x+effect.face*(43+Math.max(0,effect.time-.25)*640);
       if(!effect.hit && b.hp && b.x>=Math.min(oldX,x)-25 && b.x<=Math.max(oldX,x)+25 && Math.abs(b.y-effect.y)<80){
         if(specialHit({...a,face:effect.face},b,2,14,0,.5)){
           b.frozen=.5;b.stun=Math.max(b.stun,.5);b.charge=0;b.action=0;b.vx=b.vy=0;holdSpecial(a,2,'frozen');
@@ -1303,7 +1318,7 @@ function updateEffects(dt) {
     effect.impact=x;
     effect.time=rescue ? .99 : .92;
   }
-  const duration={'strawberry-spit':.85,'down-hearts':.85,'foon-wave':.65,'dedew-coffee':.85,'dedew-quake':.46,rescue:1.15,chocolate:1.05,gas:1.30,teleport:.49,toscana:.56,'guinea-fowl':.94,blanket:2.16,pillow:.85,physio:1.03,cheese:3.4,print:.70,'printed-shot':.65,'joy-heart':.47,'tablet-ship':1.74,tablet:1,battery:1.30,'tablet-blast':.37,'lucreci-fire':.82,'lucreci-money':1.02};
+  const duration={'money-truck':1.55,'strawberry-spit':.85,'down-hearts':.85,'foon-wave':.65,'dedew-coffee':.85,'dedew-quake':.46,rescue:1.15,chocolate:1.05,gas:1.30,teleport:.49,toscana:.56,'guinea-fowl':.94,blanket:2.16,pillow:.85,physio:1.03,cheese:3.4,print:.70,'printed-shot':.65,'joy-heart':.47,'tablet-ship':1.74,tablet:1,battery:1.30,'tablet-blast':.37,'lucreci-fire':.82,'lucreci-money':1.02};
   effects=effects.filter(effect=>effect.time<duration[effect.kind] && !((effect.kind==='tablet' || effect.kind==='battery') && effect.hit));
 }
 
@@ -1597,11 +1612,19 @@ function drawDownStatuses(a){
   text('CONGELADO '+a.frozen.toFixed(1)+'s',a.x,a.y-178,11,'#b5f2ff');ctx.restore();
  }
 }
+function drawMoneyTruck(effect){
+ const t=effect.time,progress=Math.min(1,t/.5),x=effect.x+effect.face*(-440+560*progress);
+ const image=maykimTrucks[t<.55?0:1];
+ if(image.complete && image.naturalWidth){ctx.save();ctx.translate(x,ground);ctx.scale(effect.face,1);ctx.drawImage(image,-384*.52,-720*.52,768*.52,768*.52);ctx.restore();}
+ if(t<.70){oval(effect.x,ground+4,85,8,'#ffd15466');text('TIO PATINHAS',effect.x,ground-235,16,'#ffe29a');}
+ if(t>=.55){for(let i=0;i<28;i++){const drop=((t-.55)*1.5+i*.037)%1;const cx=effect.x+Math.sin(i*9.3)*76,cy=ground-225+drop*225;oval(cx,cy,2+Math.abs(Math.sin(t*17+i))*4,5,'#ffd34e');}}
+}
 function drawEffects() {
   for (const effect of effects) {
+    if(effect.kind==='money-truck'){drawMoneyTruck(effect);continue;}
     if(effect.kind==='down-hearts'){drawDownHearts(effect.x,effect.y,effect.time);continue;}
     if(effect.kind==='strawberry-spit'){
-      if(effect.time>=.25 && !effect.hit){const x=effect.x+effect.face*(35+(effect.time-.25)*640);ctx.save();ctx.strokeStyle='#ff71b7';ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x-effect.face*40,effect.y-158);ctx.quadraticCurveTo(x-effect.face*18,effect.y-171,x,effect.y-156);ctx.stroke();for(let i=0;i<4;i++)oval(x-effect.face*i*12,effect.y-155+Math.sin(effect.time*30+i)*6,3,2,'#ffd2e8');ctx.restore();}continue;
+      if(effect.time>=.25 && !effect.hit){const distance=43+(effect.time-.25)*640,x=effect.x+effect.face*distance,tail=effect.x+effect.face*Math.max(43,distance-40);ctx.save();ctx.strokeStyle='#ff71b7';ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(tail,effect.y-134);ctx.quadraticCurveTo((tail+x)/2,effect.y-140,x,effect.y-134);ctx.stroke();for(let i=0;i<4;i++)oval(effect.x+effect.face*Math.max(43,distance-i*12),effect.y-134+Math.sin(effect.time*30+i)*4,3,2,'#ffd2e8');ctx.restore();}continue;
     }
     if(effect.kind==='foon-wave'){
       ctx.save();ctx.translate(effect.x+effect.face*(35+effect.time*600),effect.y-75);ctx.scale(effect.face,1);
@@ -1723,7 +1746,7 @@ function drawEffects() {
 }
 
 function beginCharge(a) {
-  a.charge=a.kind===0 ? .56 : a.kind===3 ? .62 : a.kind===11 ? .36 : .44;
+  a.charge=a.kind===0 ? .56 : a.kind===2 ? .65 : a.kind===3 ? .62 : a.kind===11 ? .36 : .44;
   a.y=ground;
   a.vy=0;
   a.chargedHit=false;
@@ -1995,6 +2018,14 @@ function drawPedroCrying(tile,state,clock){
   }
   ctx.restore();
 }
+function drawMaykimHD(a,tile,state,moving){
+ const image=a.charge?maykimBikeFor(a,fighters[1-a.i]):tile;
+ if(!image?.complete || !image.naturalWidth)return;
+ const clock=(last||0)/1000,scale=.42;
+ const bob=a.charge?Math.sin(clock*30)*1.4:moving&&!a.action?Math.abs(Math.sin(clock*12))*2:0;
+ const squat=state==='crouch'?.72:1;
+ ctx.save();ctx.translate(a.x,a.y-bob);ctx.scale(a.face,squat);ctx.drawImage(image,-384*scale,-720*scale,768*scale,768*scale);ctx.restore();
+}
 function drawDownFrame(tile){
  const name=tile.src.split('1-hd-')[1]?.replace(/\.webp(?:\?.*)?$/,'');
  const face=downFaces[name],rect=downFaceRects[name],scale=.30;
@@ -2053,6 +2084,8 @@ function fighter(a,pressed = keys) {
     : a.kind===7 && a.action && a.label==='PÍLULA DA REGENERAÇÃO' ? 'pill'
     : a.kind===6 && a.action && a.label==='GALINHAS DA ANGOLA' ? 'call'
     : a.kind===4 && a.action && a.label==='EQUIPE DE SOCORRO' ? 'call'
+    : a.kind===2 && a.action && a.label==='TIO PATINHAS' ? 'special'
+    : a.kind===2 && !a.action && a.y>=ground && pressed.has(a.keys[3]) ? 'crouch'
     : a.kind===1 && (embrace?.a===a || a.action && a.label==='ABRAÇO DOWN') ? 'hug'
     : a.kind===1 && a.action && a.label==='GORFINHO DE MORANGO' ? 'spit'
     : a.kind===1 && !a.action && a.y>=ground && pressed.has(a.keys[3]) ? 'crouch'
@@ -2077,7 +2110,7 @@ function fighter(a,pressed = keys) {
   const tiles=alfredoCast || (state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
   const animatedAttack=['hug','spit','special','punch','kick','teleport','pill','cheese','bat','wallet'].includes(state);
   const remaining=embrace?.a===a ? .42*(1-embrace.time/.58) : a.action;
-  const duration=a.kind<=1 || a.kind>=13 ? (a.actionDuration || .42) : .42;
+  const duration=a.kind<=2 || a.kind>=13 ? (a.actionDuration || .42) : .42;
   const frameIndex=alfredoCast ? alfredoCastFrame(state,a.action) : animatedAttack && a.action
     ? Math.max(0,Math.min(tiles.length-1,Math.floor((1-Math.min(duration,remaining)/duration)*tiles.length)))
     : Math.floor((last || 0)/(moving ? 105 : 245))%tiles.length || 0;
@@ -2086,7 +2119,9 @@ function fighter(a,pressed = keys) {
     : frameIndex;
   const preferred=tiles[chargeFrame];
   const tile=preferred?.complete && preferred.naturalWidth ? preferred : sprites[a.kind].idle.find(image=>image.complete && image.naturalWidth);
-  if(a.kind===1){
+  if(a.kind===2){
+    drawMaykimHD(a,tile,state,moving);
+  }else if(a.kind===1){
     drawDownHD(a,tile,state,moving);
   }else if(a.kind===0){
     drawPedroHD(a,tile,state,moving);
@@ -2454,6 +2489,9 @@ function predictAttack(a,slot,sequence) {
   if((a.kind===13 || a.kind===14) && (slot===1 || slot===2)) a.action=.62;
   if(a.kind===14 && slot===2){a.baby=3;a.action=.28;}
   if(a.kind===14 && a.baby>0 && (slot===0 || slot===3)) a.action=.28;
+  if(a.kind===0 && slot===2)a.action=.65;
+  if(a.kind===1 && slot===2)a.action=.72;
+  if(a.kind===2 && (slot===1 || slot===2))a.action=slot===1?.65:.72;
   a.actionDuration=a.action;
   a.cool[slot]=cooldownFor(a,slot);
   a.recovery=a.kind===14 && a.baby>0 && (slot===0 || slot===3) ? (slot===0 ? .34 : .50) : slot===0 ? .68 : slot===3 ? .82 : .70;
@@ -2461,7 +2499,7 @@ function predictAttack(a,slot,sequence) {
   if (a.kind===10 && slot===0 && a.printedTier>=0) a.label=printedItems[a.printedTier].toUpperCase();
   if (a.kind===7 && slot===1) a.frenzy=3;
   if (a.kind===7 && slot===2) a.regen=7;
-  if ((a.kind===0 && slot===1) || (slot===2 && [2,3,11].includes(a.kind))) {
+  if (((a.kind===0 || a.kind===2) && slot===1) || (slot===2 && [3,11].includes(a.kind))) {
     beginCharge(a);
     online.predictedDash={sequence,face:a.face,origin:a.x,confirmed:false,endpoint:Math.max(55,Math.min(905,a.x+a.face*chargeDistance(a)))};
   }
