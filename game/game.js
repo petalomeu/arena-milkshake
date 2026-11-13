@@ -63,6 +63,8 @@ const sprites = [{...frameCounts,idle:3,walk:5,run:4,jump:5,crouch:3,guard:4,hur
 ));
 const downHD=name=>loadFrame('1-hd-'+name);
 const downIdle=downHD('idle'),downCrouch=downHD('crouch');
+const downFaceRects={idle:[290,120,200,210],walk:[300,120,200,210],run:[395,120,180,215],punch:[310,120,200,225],hug:[330,120,220,230],spit:[390,115,200,245],guard:[245,120,225,235],kick:[155,120,220,235],jump:[335,110,215,235],crouch:[325,215,235,250],hurt:[130,110,230,240],fall:[25,475,255,225]};
+const downFaces=Object.fromEntries(Object.keys(downFaceRects).map(name=>[name,loadFrame('1-face-'+name)]));
 sprites[1]={idle:[downIdle],walk:[downHD('walk'),downIdle],run:[downHD('run'),downHD('walk')],
  punch:[downIdle,downHD('punch'),downIdle],kick:[downCrouch,downHD('kick'),downIdle],
  guard:[downHD('guard')],hurt:[downHD('hurt')],fall:[downHD('fall')],rise:[downCrouch,downIdle],
@@ -1993,11 +1995,21 @@ function drawPedroCrying(tile,state,clock){
   }
   ctx.restore();
 }
+function drawDownFrame(tile){
+ const name=tile.src.split('1-hd-')[1]?.replace(/\.webp(?:\?.*)?$/,'');
+ const face=downFaces[name],rect=downFaceRects[name],scale=.30;
+ if(!face?.complete || !face.naturalWidth || !rect){ctx.drawImage(tile,-384*scale,-720*scale,768*scale,768*scale);return;}
+ const [x,y,w,h]=rect;
+ const piece=(sx,sy,sw,sh)=>{if(sw>0 && sh>0)ctx.drawImage(tile,sx,sy,sw,sh,(sx-384)*scale,(sy-720)*scale,sw*scale,sh*scale);};
+ // Keep the original body outside the edited facial region; avoid layering two heads.
+ piece(0,0,768,y);piece(0,y,x,h);piece(x+w,y,768-x-w,h);piece(0,y+h,768,768-y-h);
+ ctx.drawImage(face,(x-384)*scale,(y-720)*scale,w*scale,h*scale);
+}
 function drawDownHD(a,tile,state,moving){
  if(!tile?.complete || !tile.naturalWidth)return;
  const clock=(last||0)/1000,breath=state==='idle'?Math.sin(clock*3)*.004:0;
  const bob=moving&&!a.action?Math.abs(Math.sin(clock*(state==='run'?18:10)))*2:0;
- ctx.save();ctx.translate(a.x,a.y-bob);ctx.scale(a.face,1+breath);ctx.drawImage(tile,-384*.30,-720*.30,768*.30,768*.30);ctx.restore();
+ ctx.save();ctx.translate(a.x,a.y-bob);ctx.scale(a.face,1+breath);drawDownFrame(tile);ctx.restore();
 }
 function drawPedroHD(a,tile,state,moving){
   if(!tile?.complete || !tile.naturalWidth)return;
