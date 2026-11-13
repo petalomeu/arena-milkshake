@@ -61,6 +61,12 @@ const sprites = [{...frameCounts,idle:3,walk:5,run:4,jump:5,crouch:3,guard:4,hur
     pose, Array.from({length:count},(_,frame) => loadFrame(i+'-'+pose+'-'+frame))
   ])
 ));
+const downHD=name=>loadFrame('1-hd-'+name);
+const downIdle=downHD('idle'),downCrouch=downHD('crouch');
+sprites[1]={idle:[downIdle],walk:[downHD('walk'),downIdle],run:[downHD('run'),downHD('walk')],
+ punch:[downIdle,downHD('punch'),downIdle],kick:[downCrouch,downHD('kick'),downIdle],
+ guard:[downHD('guard')],hurt:[downHD('hurt')],fall:[downHD('fall')],rise:[downCrouch,downIdle],
+ jump:[downHD('jump')],crouch:[downCrouch],hug:[downHD('hug')],spit:[downIdle,downHD('spit'),downHD('spit')],special:[downHD('hug')]};
 const babyLayers=Object.fromEntries(['body','left-arm','right-arm','left-leg','right-leg'].map(name=>[name,loadFrame('14-baby-'+name)]));
 // HD frames retain a common root at (384,720), including attacks and specials.
 const pedroHD=name=>loadFrame('0-hd-'+name);
@@ -110,7 +116,9 @@ const roster = [
 ];
 const characters = [...roster,{name:'Maycon',color:'#cda3ff'},{name:'Caleca',subtitle:'O Surfista Prateado',color:'#d8ebff'},{name:'Leandro Marçal',color:'#ffb1ad'},{name:'Pupinho',color:'#d6f77c'},{name:'Fabio Toscana',color:'#8fc8ff'},{name:'Angélica do Mounjaro',color:'#ff9def'},{name:'Gabriel Soneca do Almoço',color:'#d1b0ff'},{name:'Orsi Chefinho',color:'#ffd797'},{name:'Matheus the Printer',color:'#b6efbc'},{name:'Paulo Feliz',color:'#ffe28b'},{name:'CyberAlfredo',color:'#7ae9ff'},{name:'Lucreci do Pataco',subtitle:'Cabeção Natural',color:'#31c9f5',passive:'Causa até 40% mais dano contra campeões que evoluem, ficam maiores ou entram em forma ampliada.',portrait:'frames/13-portrait.png'},{name:'DêDêw',subtitle:'Punhos fortes',color:'#ffc477',passive:'Mão gradona: +15% de força. DêDêwzinhu aumenta a força e a velocidade dos golpes por 3 segundos.',portrait:'frames/14-portrait.png'}];
 characters.forEach((character,kind)=>{character.portrait='frames/'+kind+'-portrait.webp';});
-const specials = [['Matador de Onça','Foon'],['Super Abraço','Milkshake Turbo'],['Granada de Fumaça','Avanço Tático'],['Brilho da Careca','Surfista Prateado'],['Equipe de Socorro','Comedor de Açúcar!'],['Peido Infectante','Cutucada na Orelha'],['Toscana Desenrolada','Galinhas da Angola'],['Seringa da Loucura','Pílula da Regeneração'],['Dorme Neném','Hora do Cochilo'],['Invocação da Fisioterapeuta','Queijo Gorfado'],['Ovo Imprimir em','SuperEnxaqueca'],['Golpe da Felicidade','Investida da Felicidade'],['Poder dos Tablets','Taco de Beiseball'],['Molho de pimenta','Investida do Pataco'],['Esguicho do café','DêDêwzinhu']];
+characters[1].subtitle='O Campeão Amoroso';
+characters[1].passive='Amoroso: acertar golpes concede 15% de defesa e regenera 2 de vida/s por 3 segundos, sem acumular.';
+const specials = [['Matador de Onça','Foon'],['Abraço Down','Gorfinho de Morango'],['Granada de Fumaça','Avanço Tático'],['Brilho da Careca','Surfista Prateado'],['Equipe de Socorro','Comedor de Açúcar!'],['Peido Infectante','Cutucada na Orelha'],['Toscana Desenrolada','Galinhas da Angola'],['Seringa da Loucura','Pílula da Regeneração'],['Dorme Neném','Hora do Cochilo'],['Invocação da Fisioterapeuta','Queijo Gorfado'],['Ovo Imprimir em','SuperEnxaqueca'],['Golpe da Felicidade','Investida da Felicidade'],['Poder dos Tablets','Taco de Beiseball'],['Molho de pimenta','Investida do Pataco'],['Esguicho do café','DêDêwzinhu']];
 const picks = [0,1];
 const locked = [false,false];
 const cardGroups = [...document.querySelectorAll('.fighter-cards')];
@@ -134,6 +142,13 @@ function syncDeafnessAudio(){
     if(!pedroAudioBus || pedroAudioBus.context!==audio){pedroAudioBus=audio.createGain();pedroAudioBus.connect(audio.destination);}
     pedroAudioBus.gain.value=muted ? 0 : 1;
   }
+}
+function updateDownStatuses(dt){
+ for(const a of fighters){
+  a.slow=Math.max(0,(a.slow||0)-dt);a.frozen=Math.max(0,(a.frozen||0)-dt);
+  const active=Math.min(dt,a.affection||0);a.affection=Math.max(0,(a.affection||0)-dt);
+  if(a.kind===1 && a.hp>0 && active>0)a.hp=Math.min(100,a.hp+active*2);
+ }
 }
 function updatePedro(dt){
   for(const a of fighters){a.deaf=Math.max(0,(a.deaf||0)-dt);a.feminineAbility=Math.max(0,(a.feminineAbility||0)-dt);}
@@ -202,7 +217,7 @@ function reset(playing) {
   resetCPU();
   fighters = picks.map((kind,i) => ({
     ...characters[kind], keys:roster[i].keys,i,kind,x:i ? 720 : 240,y:ground,
-    deaf:0,feminineAbility:0,vy:0,vx:0,face:i ? -1 : 1,hp:100,stun:0,buff:0,charge:0,dazzle:0,tumble:0,infectionTicks:0,infectionClock:0,warp:0,snare:0,frenzy:0,regen:0,blood:0,bloodX:0,bloodY:0,asleep:0,sleepRecovery:0,nap:0,bedWalk:0,blanket:false,cloneX:0,cloneAction:0,ascended:false,migraineLevel:0,migraineTicks:0,migraineClock:0,migrainePulse:0,printedTier:-1,joyClock:0,tech:0,growthRead:0,growthPercent:0,baby:0,coffeeBurn:0,coffeeClock:0,
+    slow:0,frozen:0,affection:0,deaf:0,feminineAbility:0,vy:0,vx:0,face:i ? -1 : 1,hp:100,stun:0,buff:0,charge:0,dazzle:0,tumble:0,infectionTicks:0,infectionClock:0,warp:0,snare:0,frenzy:0,regen:0,blood:0,bloodX:0,bloodY:0,asleep:0,sleepRecovery:0,nap:0,bedWalk:0,blanket:false,cloneX:0,cloneAction:0,ascended:false,migraineLevel:0,migraineTicks:0,migraineClock:0,migrainePulse:0,printedTier:-1,joyClock:0,tech:0,growthRead:0,growthPercent:0,baby:0,coffeeBurn:0,coffeeClock:0,
     guardEnergy:100,guardBreak:0,guardDelay:0,guardNotice:0,guardNeedsRelease:false,blockFlash:0,recovery:0,flash:0,action:0,actionDuration:.42,moveTime:0,cool:[0,0,0,0],specialsInProgress:[null,null,null],label:''
   }));
   keys.clear();
@@ -226,7 +241,7 @@ function reset(playing) {
 }
 
 function isDefending(a,pressed=keys){
-  return a.hp>0 && a.guardEnergy>1e-8 && !a.guardBreak && !a.guardNeedsRelease && pressed.has(a.keys[3]) && a.y===ground && !a.stun && !a.snare && !a.asleep && !a.sleepRecovery && !a.nap && !a.bedWalk && !a.charge && !a.tumble;
+  return !a.frozen && a.hp>0 && a.guardEnergy>1e-8 && !a.guardBreak && !a.guardNeedsRelease && pressed.has(a.keys[3]) && a.y===ground && !a.stun && !a.snare && !a.asleep && !a.sleepRecovery && !a.nap && !a.bedWalk && !a.charge && !a.tumble;
 }
 function breakGuard(a,feedback=true){
   if(a.guardBreak || !a.hp)return;
@@ -278,6 +293,7 @@ function hit(a,b,damage,push,stun,grab = false, blanketHit = false, specialSlot 
   const sleepPower=a.kind===8 && (b.asleep || b.nap) ? 1.25 : 1;
   const sleepDefense=b.kind===8 && (a.asleep || a.nap) ? .8 : 1;
   damageFighter(b,damage*pedroPower(a,b)*(a.buff ? 1.45 : 1)*power*sleepPower*sleepDefense*(a.ascended ? 1.35 : 1)*(1+growthBonus)*(a.kind===14 ? (a.baby>0 ? 1.65 : 1.15) : 1),true);
+  if(a.kind===1 && before>b.hp)a.affection=3;
   if(a.kind===14 && a.baby>0 && specialSlot===0 && before>b.hp){
     effects.push({kind:'dedew-quake',owner:a.i,x:b.x,y:ground,face:a.face,time:0});
     sound('impact');
@@ -308,7 +324,7 @@ function lucreciGrowthBonus(target) {
 
 function damageFighter(target,damage,playHurt=false) {
   if (!target.hp) return;
-  target.hp=Math.max(0,target.hp-damage*.55);
+  target.hp=Math.max(0,target.hp-damage*.55*(target.kind===1 && target.affection>0 ? .85 : 1));
   if (target.kind===9 && target.hp>0 && target.hp<=40 && !target.ascended) {
     target.ascended=true;
   }
@@ -345,11 +361,11 @@ function cooldownFor(a,slot) {
 }
 
 const specialEffectSlots={
-  'foon-wave':2,rescue:1,chocolate:2,gas:1,teleport:2,toscana:1,'guinea-fowl':2,
+  'strawberry-spit':2,'down-hearts':1,'foon-wave':2,rescue:1,chocolate:2,gas:1,teleport:2,toscana:1,'guinea-fowl':2,
   blanket:1,pillow:2,physio:1,cheese:2,print:1,'joy-heart':2,'tablet-ship':1,tablet:1,battery:2,'tablet-blast':2,'lucreci-fire':1,'lucreci-money':2,'dedew-coffee':1
 };
 const ongoingSpecialStates=[
-  [['charge'],[]], [[],['buff']], [[],['charge']], [[],['charge']],
+  [['charge'],[]], [[],[]], [[],['charge']], [[],['charge']],
   [[],[]], [[],[]], [[],[]], [['frenzy'],['regen','blood']],
   [['bedWalk'],['nap']], [[],[]], [[],['migraineTicks','migrainePulse']], [[],['charge']], [[],[]], [[],[]], [[],['baby']]
 ];
@@ -392,7 +408,7 @@ function attack(a,b,slot) {
     if (slot===0 && !a.cool[0]) throwPillow(a,b);
     return;
   }
-  if (embrace || a.stun || a.snare || a.charge || a.action > .12 || a.recovery>0 || (a.cool[slot] || a.specialsInProgress[slot]) || keys.has(a.keys[3])) return;
+  if (embrace || a.frozen || a.stun || a.snare || a.charge || a.action > .12 || a.recovery>0 || (a.cool[slot] || a.specialsInProgress[slot]) || keys.has(a.keys[3])) return;
   a.face = Math.sign(b.x-a.x) || a.face;
   a.cool[slot] = cooldownFor(a,slot);
   a.recovery=a.kind===14 && a.baby>0 && (slot===0 || slot===3) ? (slot===0 ? .34 : .50) : slot===0 ? .68 : slot===3 ? .82 : .70;
@@ -549,7 +565,8 @@ function attack(a,b,slot) {
       beginCharge(a);
     }
   } else if (slot === 1) {
-    a.label = 'SUPER ABRAÇO';
+    a.label = 'ABRAÇO DOWN';
+    effects.push({kind:'down-hearts',owner:a.i,x:a.x,y:a.y,face:a.face,time:0});
     playClip('hug');
     if (close && gap < 125) {
       const dodge = keys.has(b.keys[2]) || b.y < ground-45 || b.charge;
@@ -566,10 +583,10 @@ function attack(a,b,slot) {
     playClip('horn');
     effects.push({kind:'foon-wave',owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
   } else {
-    a.label = 'MILKSHAKE TURBO';
-    playClip('milk');
-    sound('sip');
-    a.buff = 4.5;
+    a.label = 'GORFINHO DE MORANGO';
+    a.action=a.actionDuration=.72;
+    playClip('milk');sound('sip');
+    effects.push({kind:'strawberry-spit',owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
   }
 }
 
@@ -795,7 +812,7 @@ function cpuSpecialRange(a,b,gap){
   // Each pair describes when the two specials are useful for this champion.
   switch(a.kind){
     case 0:return [gap>100 && gap<550,gap<380];
-    case 1:return [gap<115,gap<400 && !a.buff];
+    case 1:return [gap<115,gap<380];
     case 2:return [gap<360,gap>140 && gap<650];
     case 3:return [gap<340,gap>145 && gap<650];
     case 4:return [gap<650,gap<690];
@@ -855,6 +872,7 @@ function update(dt) {
   }
   if (phase !== 'fight') return;
   updatePedro(dt);
+  updateDownStatuses(dt);
   if(fightCue>0){fightCue=Math.max(0,fightCue-dt);if(!fightCue)banner='';}
   if(cpu.active && !online) updateCPU(dt);
   time = Math.max(0,time-dt);
@@ -876,10 +894,8 @@ function update(dt) {
     b.x -= (gap-a.face*43)*Math.min(1,dt*18);
     b.face = -a.face;
     if (embrace.time >= .58) {
-      specialHit(a,b,1,20,575,.48,true);
-      holdSpecial(a,1,'tumble');
-      b.vy = -285;
-      b.tumble = .55;
+      if(specialHit(a,b,1,20,170,.28,true)){b.slow=2;holdSpecial(a,1,'slow');}
+      effects.push({kind:'down-hearts',owner:a.i,x:b.x,y:b.y,face:a.face,time:0});
       sound('impact');
       embrace = null;
     } else {
@@ -924,6 +940,7 @@ function update(dt) {
       a.vx=a.vy=0;
       continue;
     }
+    if(a.frozen>0){a.vx=a.vy=0;continue;}
     if (a.charge) {
       const distance=advanceCharge(a,dt);
       if (a.kind===11 && a.charge===0 && a.hp) {
@@ -1082,6 +1099,21 @@ function updateEffects(dt) {
   for (const effect of effects) {
     const old=effectPosition(effect);
     effect.time+=dt;
+    if(effect.kind==='down-hearts')continue;
+    if(effect.kind==='strawberry-spit'){
+      const a=fighters[effect.owner],b=fighters[1-effect.owner];
+      if(effect.time<.25)continue;
+      const oldX=effect.x+effect.face*(35+Math.max(0,effect.time-dt-.25)*640);
+      const x=effect.x+effect.face*(35+Math.max(0,effect.time-.25)*640);
+      if(!effect.hit && b.hp && b.x>=Math.min(oldX,x)-25 && b.x<=Math.max(oldX,x)+25 && Math.abs(b.y-effect.y)<80){
+        if(specialHit({...a,face:effect.face},b,2,14,0,.5)){
+          b.frozen=.5;b.stun=Math.max(b.stun,.5);b.charge=0;b.action=0;b.vx=b.vy=0;holdSpecial(a,2,'frozen');
+          a.affection=3;
+        }
+        effect.hit=true;
+      }
+      continue;
+    }
     if(effect.kind==='foon-wave'){
       const attacker=fighters[effect.owner],target=fighters[1-effect.owner];
       const previous=effect.x+effect.face*(35+oldTimeForFoon(effect,dt)*600);
@@ -1269,7 +1301,7 @@ function updateEffects(dt) {
     effect.impact=x;
     effect.time=rescue ? .99 : .92;
   }
-  const duration={'foon-wave':.65,'dedew-coffee':.85,'dedew-quake':.46,rescue:1.15,chocolate:1.05,gas:1.30,teleport:.49,toscana:.56,'guinea-fowl':.94,blanket:2.16,pillow:.85,physio:1.03,cheese:3.4,print:.70,'printed-shot':.65,'joy-heart':.47,'tablet-ship':1.74,tablet:1,battery:1.30,'tablet-blast':.37,'lucreci-fire':.82,'lucreci-money':1.02};
+  const duration={'strawberry-spit':.85,'down-hearts':.85,'foon-wave':.65,'dedew-coffee':.85,'dedew-quake':.46,rescue:1.15,chocolate:1.05,gas:1.30,teleport:.49,toscana:.56,'guinea-fowl':.94,blanket:2.16,pillow:.85,physio:1.03,cheese:3.4,print:.70,'printed-shot':.65,'joy-heart':.47,'tablet-ship':1.74,tablet:1,battery:1.30,'tablet-blast':.37,'lucreci-fire':.82,'lucreci-money':1.02};
   effects=effects.filter(effect=>effect.time<duration[effect.kind] && !((effect.kind==='tablet' || effect.kind==='battery') && effect.hit));
 }
 
@@ -1551,8 +1583,24 @@ function drawDedewQuake(effect){
   }
   ctx.restore();
 }
+function drawDownHearts(x,y,clock){
+ for(let i=0;i<6;i++){const angle=i*Math.PI/3+clock*2;const radius=35+i%2*12;text('♥',x+Math.cos(angle)*radius,y-70+Math.sin(angle)*24-clock*8,16+i%2*6,'#ff80bd');}
+}
+function drawDownStatuses(a){
+ if(a.kind===1 && (a.affection>0 || embrace?.a===a))drawDownHearts(a.x,a.y,(last||0)/1000%2);
+ if(a.slow>0)text('LENTIDÃO',a.x,a.y+24,11,'#ffa4d0');
+ if(a.frozen>0){
+  ctx.save();ctx.fillStyle='#92e7ff55';ctx.strokeStyle='#b5f2ff';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(a.x-43,a.y);ctx.lineTo(a.x-52,a.y-99);ctx.lineTo(a.x-29,a.y-148);ctx.lineTo(a.x+19,a.y-164);ctx.lineTo(a.x+51,a.y-107);ctx.lineTo(a.x+43,a.y);ctx.closePath();ctx.fill();ctx.stroke();
+  text('CONGELADO '+a.frozen.toFixed(1)+'s',a.x,a.y-178,11,'#b5f2ff');ctx.restore();
+ }
+}
 function drawEffects() {
   for (const effect of effects) {
+    if(effect.kind==='down-hearts'){drawDownHearts(effect.x,effect.y,effect.time);continue;}
+    if(effect.kind==='strawberry-spit'){
+      if(effect.time>=.25 && !effect.hit){const x=effect.x+effect.face*(35+(effect.time-.25)*640);ctx.save();ctx.strokeStyle='#ff71b7';ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x-effect.face*40,effect.y-158);ctx.quadraticCurveTo(x-effect.face*18,effect.y-171,x,effect.y-156);ctx.stroke();for(let i=0;i<4;i++)oval(x-effect.face*i*12,effect.y-155+Math.sin(effect.time*30+i)*6,3,2,'#ffd2e8');ctx.restore();}continue;
+    }
     if(effect.kind==='foon-wave'){
       ctx.save();ctx.translate(effect.x+effect.face*(35+effect.time*600),effect.y-75);ctx.scale(effect.face,1);
       ctx.strokeStyle='#e693ff';ctx.lineWidth=4;ctx.globalAlpha=1-effect.time/.7;
@@ -1693,17 +1741,17 @@ function evolution(a) {
   return a.kind===7 ? Math.floor((60-time+1e-6)/10) : 0;
 }
 function moveFighter(a,b,pressed,dt) {
-  if(a.guardBreak)return;
+  if(a.guardBreak || a.frozen)return;
   const gap=b.x-a.x;
   const direction = a.frenzy ? (Math.abs(gap)>82 ? Math.sign(gap) : 0)
     : Number(pressed.has(a.keys[1]))-Number(pressed.has(a.keys[0]));
   a.moveTime = direction ? a.moveTime+dt : 0;
-  a.x += direction * (a.kind === 0 ? 280 : 222) * (a.moveTime > .32 ? 1 : .69) * (a.buff ? 1.52 : a.frenzy ? 1.78 : a.ascended ? 1.32 : 1) * dt;
+  a.x += direction * (a.kind === 0 ? 280 : 222) * (a.moveTime > .32 ? 1 : .69) * (a.buff ? 1.52 : a.frenzy ? 1.78 : a.ascended ? 1.32 : 1) * (a.slow>0 ? .6 : 1) * dt;
   if (pressed.has(a.keys[2])) jump(a,pressed);
   a.face = Math.sign(b.x-a.x) || a.face;
 }
 function jump(a,pressed) {
-  if (a.y === ground && !a.stun && !a.guardBreak && !a.snare && !a.asleep && !a.sleepRecovery && !a.nap && !a.bedWalk && !a.charge && !pressed.has(a.keys[3])) a.vy=-520;
+  if (a.y === ground && !a.frozen && !a.stun && !a.guardBreak && !a.snare && !a.asleep && !a.sleepRecovery && !a.nap && !a.bedWalk && !a.charge && !pressed.has(a.keys[3])) a.vy=-520;
 }
 function applyMomentum(a,dt) {
   a.x = Math.max(55,Math.min(905,a.x+a.vx*dt));
@@ -1945,6 +1993,12 @@ function drawPedroCrying(tile,state,clock){
   }
   ctx.restore();
 }
+function drawDownHD(a,tile,state,moving){
+ if(!tile?.complete || !tile.naturalWidth)return;
+ const clock=(last||0)/1000,breath=state==='idle'?Math.sin(clock*3)*.004:0;
+ const bob=moving&&!a.action?Math.abs(Math.sin(clock*(state==='run'?18:10)))*2:0;
+ ctx.save();ctx.translate(a.x,a.y-bob);ctx.scale(a.face,1+breath);ctx.drawImage(tile,-384*.30,-720*.30,768*.30,768*.30);ctx.restore();
+}
 function drawPedroHD(a,tile,state,moving){
   if(!tile?.complete || !tile.naturalWidth)return;
   const clock=(last || 0)/1000;
@@ -1987,9 +2041,12 @@ function fighter(a,pressed = keys) {
     : a.kind===7 && a.action && a.label==='PÍLULA DA REGENERAÇÃO' ? 'pill'
     : a.kind===6 && a.action && a.label==='GALINHAS DA ANGOLA' ? 'call'
     : a.kind===4 && a.action && a.label==='EQUIPE DE SOCORRO' ? 'call'
+    : a.kind===1 && (embrace?.a===a || a.action && a.label==='ABRAÇO DOWN') ? 'hug'
+    : a.kind===1 && a.action && a.label==='GORFINHO DE MORANGO' ? 'spit'
+    : a.kind===1 && !a.action && a.y>=ground && pressed.has(a.keys[3]) ? 'crouch'
     : special ? 'special'
     : a.action ? (a.label === 'CHUTE' ? 'kick' : 'punch')
-    : a.y < ground ? (a.kind===0 || a.kind >= 2 ? 'jump' : 'kick')
+    : a.y < ground ? (a.kind===0 || a.kind===1 || a.kind >= 2 ? 'jump' : 'kick')
     : a.kind===9 && !a.ascended ? 'idle'
     : a.frenzy ? 'run'
     : moving ? (a.buff || a.moveTime > .32 ? 'run' : 'walk')
@@ -2006,18 +2063,20 @@ function fighter(a,pressed = keys) {
   const alfredoCast=a.kind===12 && alfredoCastFrames[state];
   const transformed=a.kind===14 && a.baby>0;
   const tiles=alfredoCast || (state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
-  const animatedAttack=['special','punch','kick','teleport','pill','cheese','bat','wallet'].includes(state);
+  const animatedAttack=['hug','spit','special','punch','kick','teleport','pill','cheese','bat','wallet'].includes(state);
   const remaining=embrace?.a===a ? .42*(1-embrace.time/.58) : a.action;
-  const duration=a.kind===0 || a.kind>=13 ? (a.actionDuration || .42) : .42;
+  const duration=a.kind<=1 || a.kind>=13 ? (a.actionDuration || .42) : .42;
   const frameIndex=alfredoCast ? alfredoCastFrame(state,a.action) : animatedAttack && a.action
     ? Math.max(0,Math.min(tiles.length-1,Math.floor((1-Math.min(duration,remaining)/duration)*tiles.length)))
     : Math.floor((last || 0)/(moving ? 105 : 245))%tiles.length || 0;
   const chargeFrame = a.kind===0 && state==='charge' ? Math.min(tiles.length-1,Math.floor((.56-a.charge)/.56*tiles.length)) : a.kind===3 && (state==='transform' || state==='dash')
     ? Math.min(tiles.length-1,Math.max(0,Math.floor((state==='transform' ? (.62-a.charge)/.14 : (.48-a.charge)/.48)*tiles.length)))
     : frameIndex;
-  const preferred=phase==='end' && a.kind===1 && a.hp>fighters[1-a.i].hp ? celebration : tiles[chargeFrame];
+  const preferred=tiles[chargeFrame];
   const tile=preferred?.complete && preferred.naturalWidth ? preferred : sprites[a.kind].idle.find(image=>image.complete && image.naturalWidth);
-  if(a.kind===0){
+  if(a.kind===1){
+    drawDownHD(a,tile,state,moving);
+  }else if(a.kind===0){
     drawPedroHD(a,tile,state,moving);
   }else if(transformed){
     drawBabyChampion(a,state,moving);
@@ -2128,6 +2187,7 @@ function fighter(a,pressed = keys) {
       oval(x,y,12+progress*20,10+progress*14,'#bb81ee6e');
     }
   }
+  drawDownStatuses(a);
   if (a.label === 'FOOOON!' && a.action) {
     ctx.strokeStyle = a.color;
     ctx.lineWidth = 4;
@@ -2372,11 +2432,12 @@ function predictAttack(a,slot,sequence) {
     return;
   }
   if (a.asleep || a.sleepRecovery || a.bedWalk) return;
-  if (a.stun || a.guardBreak || a.snare || a.charge || a.action>.12 || a.recovery>0 || (a.cool[slot] || a.specialsInProgress?.[slot]) || online.localKeys.has(a.keys[3])) return;
+  if (a.frozen || a.stun || a.guardBreak || a.snare || a.charge || a.action>.12 || a.recovery>0 || (a.cool[slot] || a.specialsInProgress?.[slot]) || online.localKeys.has(a.keys[3])) return;
   a.face=Math.sign(fighters[0].x-a.x) || a.face;
   a.label=slot===0 ? 'ATAQUE' : slot===3 ? 'CHUTE' : specials[a.kind][slot-1].toUpperCase();
   if(a.kind===0 && slot===2){a.label='FOOOON!';a.action=.65;}
-  if (a.kind===1 && slot===1) a.label='SUPER ABRAÇO';
+  if (a.kind===1 && slot===1) a.label='ABRAÇO DOWN';
+  if (a.kind===1 && slot===2){a.label='GORFINHO DE MORANGO';a.action=.72;}
   a.action=.42;
   if((a.kind===13 || a.kind===14) && (slot===1 || slot===2)) a.action=.62;
   if(a.kind===14 && slot===2){a.baby=3;a.action=.28;}
@@ -2391,8 +2452,6 @@ function predictAttack(a,slot,sequence) {
   if ((a.kind===0 && slot===1) || (slot===2 && [2,3,11].includes(a.kind))) {
     beginCharge(a);
     online.predictedDash={sequence,face:a.face,origin:a.x,confirmed:false,endpoint:Math.max(55,Math.min(905,a.x+a.face*chargeDistance(a)))};
-  } else if (slot===2 && a.kind===1) {
-    a.buff=4.5;
   }
 }
 
@@ -2458,6 +2517,7 @@ function reconcileGuestVisual(previous,ack=0) {
   visual.flash=confirmed.flash;
   visual.tumble=confirmed.tumble;
   visual.infectionTicks=confirmed.infectionTicks;
+  visual.slow=confirmed.slow;visual.frozen=confirmed.frozen;visual.affection=confirmed.affection;
   visual.coffeeBurn=confirmed.coffeeBurn;
   visual.snare=confirmed.snare;
   visual.blood=confirmed.blood;
@@ -2486,7 +2546,7 @@ function advanceGuestVisual(dt) {
   const confirmed=fighters[1];
   const pressed=online.localKeys;
   updateGuard(visual,dt,pressed,false);
-  if (embrace || confirmed.stun || confirmed.guardBreak || confirmed.snare || confirmed.flash || confirmed.asleep || confirmed.sleepRecovery || confirmed.bedWalk) return confirmed;
+  if (embrace || confirmed.frozen || confirmed.stun || confirmed.guardBreak || confirmed.snare || confirmed.flash || confirmed.asleep || confirmed.sleepRecovery || confirmed.bedWalk) return confirmed;
   if (visual.nap) {
     visual.cloneAction=Math.max(0,visual.cloneAction-dt);
     moveClone(visual,pressed,dt);
@@ -2512,7 +2572,7 @@ function advanceGuestVisual(dt) {
   if (!online.pendingInputs.length && !isDefending(visual,pressed)) {
     const direction=visual.frenzy ? (Math.abs(fighters[0].x-visual.x)>82 ? Math.sign(fighters[0].x-visual.x) : 0) : Number(pressed.has(visual.keys[1]))-Number(pressed.has(visual.keys[0]));
     const lead=online.lead ?? .06;
-    const speed=(visual.kind===0 ? 280 : 222)*(visual.moveTime>.32 ? 1 : .69)*(visual.buff ? 1.52 : visual.frenzy ? 1.78 : visual.ascended ? 1.32 : 1);
+    const speed=(visual.kind===0 ? 280 : 222)*(visual.moveTime>.32 ? 1 : .69)*(visual.buff ? 1.52 : visual.frenzy ? 1.78 : visual.ascended ? 1.32 : 1)*(visual.slow>0 ? .6 : 1);
     const projectedX=confirmed.x+(visual.charge ? visual.face*800 : direction*speed)*lead;
     visual.x=Math.max(55,Math.min(905,visual.x+(projectedX-visual.x)*Math.min(1,dt*9)));
     if (!pressed.has(visual.keys[2]) && confirmed.y!==ground) {
