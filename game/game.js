@@ -118,9 +118,12 @@ const stageCards = [...document.querySelectorAll('.stage-card')];
 const visibleHeadGrowth=[0,0];
 let fighters, effects, time, phase, banner, last, embrace, audio, reaction, reactionStarted, waitingForPedro;
 let pedroAudioBus;
+// Use the arena's actual transition state for both fear and its damage penalty.
+function inAdelia(){return Boolean(fighters?.some(f=>f.ascended));}
+function pedroIsCrying(a){return a.kind===0 && inAdelia();}
 function pedroPower(a,b) {
   if(a.kind!==0) return 1;
-  if(fighters.some(f=>f.kind===9 && f.ascended)) return .7;
+  if(pedroIsCrying(a)) return .7;
   return b.kind===7 || b.kind===13 || b.feminineAbility>0 ? 1.3 : 1;
 }
 function syncDeafnessAudio(){
@@ -1821,7 +1824,7 @@ function drawSchool() {
   for(let i=0;i<6;i++) rect(285+i*77,427,49,3,'#aca8ba');
 }
 function arena() {
-  if (fighters.some(a=>a.ascended)) { drawSchool(); return; }
+  if (inAdelia()) { drawSchool(); return; }
   const index=stageIndex;
   const image=stages[index];
   if(image.complete && image.naturalWidth) {
@@ -1910,6 +1913,38 @@ function drawBabyChampion(a,state,moving){
   ctx.restore();
 }
 
+const pedroFaceAnchors={
+ idle:[414,140],windup:[425,170],punch:[442,182],
+ 'walk-0':[425,162],'walk-1':[450,162],'walk-2':[425,162],'walk-3':[450,162],
+ 'run-0':[466,175],'run-1':[460,175],'run-2':[490,190],
+ jump:[430,172],crouch:[450,292],guard:[418,166],kick:[340,170],knee:[455,165],
+ hurt:[285,160],fall:[110,570],rise:[470,320],
+ 'horn-ready':[423,143],'horn-blow':[360,180],bull:[465,310]
+};
+function drawPedroCrying(tile,state,clock){
+  const name=tile.src.split('0-hd-')[1]?.replace(/\.webp(?:\?.*)?$/,'');
+  const [x,y]=pedroFaceAnchors[name] || pedroFaceAnchors.idle;
+  ctx.save();ctx.translate((x-384)*.30,(y-720)*.30);
+  if(state==='fall')ctx.rotate(-1.15);
+  // Opaque tear streams stay visible over every pose, with animated falling drops.
+  for(const side of [-1,1]){
+    const eye=side*3.3;
+    ctx.strokeStyle='#e0f8ff';ctx.lineWidth=2.8;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(eye,0);ctx.quadraticCurveTo(eye+side,4,eye+side*1.2,8);ctx.stroke();
+    ctx.strokeStyle='#48c4ff';ctx.lineWidth=1.6;ctx.stroke();
+    const drop=(clock*17+(side+1)*4)%13;
+    ctx.globalAlpha=1-drop/17;ctx.fillStyle='#72dcff';
+    ctx.beginPath();ctx.ellipse(eye+side*1.2,7+drop,1.5,2.5,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+    ctx.strokeStyle='#482c38';ctx.lineWidth=1.3;
+    ctx.beginPath();ctx.moveTo(eye-2,-2);ctx.lineTo(eye+2,-3);ctx.stroke();
+  }
+  // Frown covers the smiling mouth; the horn's blowing pose keeps its embouchure.
+  if(name!=='horn-blow'){
+    ctx.fillStyle='#ed9b5f';ctx.beginPath();ctx.ellipse(1,7.3,4.8,3,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#633326';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(-3,8.5);ctx.quadraticCurveTo(1,4.6,5,8.5);ctx.stroke();
+  }
+  ctx.restore();
+}
 function drawPedroHD(a,tile,state,moving){
   if(!tile?.complete || !tile.naturalWidth)return;
   const clock=(last || 0)/1000;
@@ -1917,13 +1952,15 @@ function drawPedroHD(a,tile,state,moving){
   const stride=moving && !a.action && !a.charge ? Math.sin(clock*(state==='run' ? 22 : 13)) : 0;
   const scale=.30;
   ctx.save();ctx.translate(a.x,a.y-Math.abs(stride)*(state==='run' ? 2.5 : .8));ctx.scale(a.face,1+breath);
-  ctx.drawImage(tile,-384*scale,-720*scale,768*scale,768*scale);ctx.restore();
+  ctx.drawImage(tile,-384*scale,-720*scale,768*scale,768*scale);
+  if(pedroIsCrying(a))drawPedroCrying(tile,state,clock);
+  ctx.restore();
 }
 function fighter(a,pressed = keys) {
   const guard = isDefending(a,pressed);
   const lift = 0;
   if(a.deaf>0)text('SURDEZ '+a.deaf.toFixed(1)+'s',a.x,a.y-175,13,'#edb1ff');
-  if(a.kind===0 && phase==='fight')text(pedroPower(a,fighters[1-a.i])<1 ? 'MEDO DO ADÉLIA −30%' : pedroPower(a,fighters[1-a.i])>1 ? 'CAMPEÃO DA ROÇA +30%' : '',a.x,a.y-193,12,'#ffdc78');
+  if(a.kind===0 && phase==='fight')text(pedroIsCrying(a) ? 'CHORANDO · DANO −30%' : pedroPower(a,fighters[1-a.i])>1 ? 'CAMPEÃO DA ROÇA +30%' : '',a.x,a.y-213,12,pedroIsCrying(a) ? '#80dbff' : '#ffdc78');
   oval(a.x,ground+8,44,9,'#160c20');
   const moving = phase === 'fight' && (pressed.has(a.keys[0]) || pressed.has(a.keys[1]));
   const special = a.charge || embrace?.a === a || (a.action && ['FOOOON!','SUPER ABRAÇO','MILKSHAKE TURBO','GRANADA DE FUMAÇA','BRILHO DA CARECA','COMEDOR DE AÇÚCAR!','PEIDO INFECTANTE','TOSCANA DESENROLADA','SERINGA DA LOUCURA','DORME NENÉM','INVOCAÇÃO DA FISIOTERAPEUTA','OVO IMPRIMIR EM','SUPERENXAQUECA','GOLPE DA FELICIDADE','PODER DOS TABLETS','MOLHO DE PIMENTA','INVESTIDA DO PATACO','ESGUICHO DO CAFÉ','DÊDÊWZINHU'].includes(a.label));
@@ -2585,6 +2622,7 @@ document.addEventListener('fullscreenchange',()=>{
 });
 showCharacters();
 requestAnimationFrame(frame);
+
 
 
 
