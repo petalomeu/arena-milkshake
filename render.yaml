@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: arena-milkshake
+    runtime: node
+    plan: free
+    buildCommand: node prepare-assets.mjs && node --check server.mjs
+    startCommand: node server.mjs
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 24.22.1
