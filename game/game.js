@@ -7,7 +7,7 @@ const start = document.querySelector('#start');
 const keys = new Set();
 const arenaProfiles = [
   {name:'Milkshake Down',id:'milkshake'},
-  {name:'Arena de Combate',id:'ure'},
+  {name:'Arena dos Campeões',id:'ure'},
   {name:'Fazenda do Berranteiro',id:'fazenda'},
   {name:'Gráfica do Matheus',id:'grafica'},
   {name:'Cofre do Grau',id:'cofre'},
@@ -808,6 +808,7 @@ cardGroups.forEach((group,player) => {
 function chooseStage(index) {
   if(!Number.isInteger(index) || !stages[index])return;
   stageIndex=index;
+  loadArenaFrames(arenaProfiles[index].id);
   stageCards.forEach((card,i)=>card.setAttribute('aria-pressed',String(i===index)));
 }
 stageCards.forEach((card,i)=>{card.onclick=()=>{
@@ -2125,54 +2126,51 @@ function oval(x,y,rx,ry,color) {
 const schoolArena=new Image();
 schoolArena.src='stage-adelia.webp';
 
-// Bounds are in the arena's 960 × 500 coordinate system. Each band uses only
-// the pixels already painted there. Fixed outer edges keep the rails still.
-const paintedStands={
-  milkshake:[[0,158,243,79],[714,158,246,79]],
-  ure:[[0,174,283,69],[677,174,283,69]],
-  fazenda:[[0,148,206,103],[756,149,204,103]],
-  grafica:[[0,160,182,97],[773,160,187,97]],
-  cofre:[[0,156,217,100],[746,157,214,100]],
-  adelia:[[0,157,236,89],[725,157,235,89]]
-};
-const paintedDetails={
-  milkshake:[[153,58,112,85],[691,58,110,85]],
-  ure:[[315,63,330,128],[123,53,115,144],[729,53,112,144]],
-  fazenda:[[293,233,60,31],[428,229,69,35],[534,237,72,29],[55,62,42,79],[862,62,48,79]],
-  grafica:[[59,96,168,146],[736,96,169,146]],
-  cofre:[[397,249,169,76],[129,69,48,79],[792,69,54,79]],
+const arenaFrames=new Map();
+const composedArenaFrames=new WeakMap();
+const paintedFlags={
+  ure:[[28,164,132,61],[768,165,150,59]],
+  fazenda:[[55,62,42,79],[862,62,48,79]],
+  cofre:[[129,69,48,79],[792,69,54,79]],
   adelia:[[24,235,200,57],[739,235,196,57]]
 };
+function loadArenaFrames(id) {
+  if(!arenaFrames.has(id))arenaFrames.set(id,[1,2].map(index=>loadFrame('stage-'+id+'-mov-'+index)));
+  return arenaFrames.get(id);
+}
+function composedArenaFrame(base,patch) {
+  if(composedArenaFrames.has(patch))return composedArenaFrames.get(patch);
+  const frame=document.createElement('canvas');
+  frame.width=base.naturalWidth;
+  frame.height=base.naturalHeight;
+  const paint=frame.getContext('2d');
+  if(!paint?.drawImage)return base;
+  paint.drawImage(base,0,0,frame.width,frame.height);
+  paint.drawImage(patch,0,0,frame.width,frame.height);
+  composedArenaFrames.set(patch,frame);
+  return frame;
+}
 function stageReaction(id) {
   if(id==='fazenda')return fighters.some(a=>a.kind===0 && a.charge>0);
   if(id==='grafica')return fighters.some(a=>a.kind===10 && a.action>0 &&
     (a.label==='OVO IMPRIMIR EM' || a.label==='SUPERENXAQUECA')) || effects.some(e=>e.kind==='print');
   return id==='cofre' && effects.some(e=>e.kind==='money-truck');
 }
-function movePaintedBand(image,[x,y,w,h],clock,amplitude,horizontal=false) {
-  const sx=image.naturalWidth/960,sy=image.naturalHeight/500;
-  const length=horizontal ? h : w;
-  const depth=horizontal ? w : h;
-  const count=Math.ceil(length/(horizontal ? 5 : 10));
-  const edge=length/count;
-  const joint=depth*.51;
+function movePaintedFlag(image,[x,y,w,h],clock,amplitude) {
+  const sx=(image.naturalWidth || image.width)/960,sy=(image.naturalHeight || image.height)/500;
+  const count=Math.ceil(h/5);
+  const edge=h/count;
+  const joint=w*.51;
   for(let i=0;i<count;i++){
     const center=(i+.5)/count;
-    const motion=Math.sin(clock+center*(horizontal ? 2.6 : 13))*
+    const motion=Math.sin(clock+center*2.6)*
       Math.sin(center*Math.PI)*amplitude;
     const offset=i*edge;
-    const slice=Math.min(length-offset,edge+.18);
-    if(horizontal){
-      const row=y+offset;
-      ctx.drawImage(image,x*sx,row*sy,joint*sx,slice*sy,x,row,joint+motion,slice);
-      ctx.drawImage(image,(x+joint)*sx,row*sy,(w-joint)*sx,slice*sy,
-        x+joint+motion,row,w-joint-motion,slice);
-    }else{
-      const col=x+offset;
-      ctx.drawImage(image,col*sx,y*sy,slice*sx,joint*sy,col,y,slice,joint+motion);
-      ctx.drawImage(image,col*sx,(y+joint)*sy,slice*sx,(h-joint)*sy,
-        col,y+joint+motion,slice,h-joint-motion);
-    }
+    const slice=Math.min(h-offset,edge+.18);
+    const row=y+offset;
+    ctx.drawImage(image,x*sx,row*sy,joint*sx,slice*sy,x,row,joint+motion,slice);
+    ctx.drawImage(image,(x+joint)*sx,row*sy,(w-joint)*sx,slice*sy,
+      x+joint+motion,row,w-joint-motion,slice);
   }
 }
 function arena() {
@@ -2180,19 +2178,17 @@ function arena() {
   const id=adelia ? 'adelia' : arenaProfiles[stageIndex].id;
   const image=adelia ? schoolArena : stages[stageIndex];
   if(readyImage(image)){
-    ctx.drawImage(image,0,0,960,500);
     const clock=(last || 0)/1000;
     const reaction=stageReaction(id);
     const cheering=phase==='end' || effects.some(e=>e.kind==='victim-impact');
     const strength=reduceMotion.matches ? .42 : 1;
-    paintedStands[id].forEach((band,index)=>{
-      movePaintedBand(image,band,clock*(cheering ? 5.4 : 3.7)+index*1.3,(cheering ? 16 : 11)*strength);
-    });
-    paintedDetails[id]?.forEach((band,index)=>{
-      // The cattle move within individual crops; the fence and ground are outside them.
-      const bull=id==='fazenda' && index<3;
-      const amplitude=bull ? (reaction ? 11 : 7.5) : (reaction ? 12 : 6);
-      movePaintedBand(image,band,clock*(bull ? 3.4 : 2.8)+index*1.5,amplitude*strength,true);
+    const rate=(reaction || cheering ? 5 : 3.1)*(reduceMotion.matches ? .65 : 1);
+    const step=[0,1,2,1][Math.floor(clock*rate)%4];
+    const patch=loadArenaFrames(id)[step-1];
+    const frame=readyImage(patch) ? composedArenaFrame(image,patch) : image;
+    ctx.drawImage(frame,0,0,960,500);
+    paintedFlags[id]?.forEach((band,index)=>{
+      movePaintedFlag(frame,band,clock*2.8+index*1.5,(reaction ? 12 : 6)*strength);
     });
   }else{
     rect(0,0,960,500,'#261b38');
