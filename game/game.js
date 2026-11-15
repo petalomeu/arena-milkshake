@@ -84,13 +84,38 @@ sprites[0]={
 };
 const maykimHD=name=>loadFrame('2-hd-'+name);
 const maykimIdle=maykimHD('idle'),maykimGuard=maykimHD('guard');
-sprites[2]={idle:[maykimIdle],walk:[maykimHD('walk'),maykimIdle],run:[maykimHD('run'),maykimHD('walk')],
+sprites[2]={idle:[maykimIdle],walk:[0,1,2,3].map(i=>maykimHD('walk-'+i)),run:[0,1,2,3].map(i=>maykimHD('run-'+i)),
  punch:[maykimGuard,maykimHD('punch'),maykimIdle],kick:[maykimGuard,maykimHD('kick'),maykimIdle],
- guard:[maykimGuard],hurt:[maykimHD('hurt')],fall:[maykimHD('fall')],rise:[maykimGuard,maykimIdle],
- jump:[maykimHD('kick')],crouch:[maykimGuard],dash:[maykimHD('bike')],special:[maykimIdle,maykimHD('punch'),maykimIdle]};
+ guard:[maykimGuard],hurt:[maykimHD('hurt')],fall:[maykimHD('fall')],rise:[maykimHD('rise'),maykimIdle],
+ jump:[maykimHD('takeoff'),maykimHD('jump'),maykimHD('land')],crouch:[maykimHD('land')],
+ dash:[maykimHD('bike')],special:[maykimIdle,maykimHD('punch'),maykimIdle]};
 const maykimBikePedro=maykimHD('bike-pedro');
 const maykimTrucks=[maykimHD('truck'),maykimHD('truck-tip')];
 function maykimBikeFor(a,b){return b.kind===0 ? sprites[2].dash[0] : maykimBikePedro;}
+const rosterHD = new Map();
+function loadRosterHD(kind) {
+  if (kind < 4 || kind >= sprites.length) return;
+  if (rosterHD.has(kind)) return rosterHD.get(kind);
+  const pose = name => loadFrame(kind + '-hd-' + name);
+  const idle = pose('idle');
+  const guard = pose('guard');
+  const punch = pose('punch');
+  const kick = pose('kick');
+  const poses = {
+    idle: [idle],
+    walk: [0,1,2,3].map(index => pose('walk-' + index)),
+    run: [0,1,2,3].map(index => pose('run-' + index)),
+    punch: [guard, punch, punch, idle],
+    kick: [guard, kick, kick, idle],
+    guard: [guard],
+    jump: [pose('jump')],
+    hurt: [pose('hurt')],
+    fall: [pose('fall')],
+    rise: [pose('rise'), idle],
+  };
+  rosterHD.set(kind, poses);
+  return poses;
+}
 const bull = loadFrame('bull');
 const ambulance = loadFrame('4-ambulance-0');
 const nurses = [0,1,2].map(i=>loadFrame('4-nurse-'+i));
@@ -677,6 +702,7 @@ function confirmFighter(player) {
 }
 function paintConfirmation(player) {
   const panel = cardGroups[player].parentElement;
+  if (locked[player]) loadRosterHD(picks[player]);
   panel.querySelector('.confirm').textContent = locked[player] ? 'Alterar escolha' : cpu.active && player===1 ? 'Confirmar oponente' : 'Confirmar campeão';
   [...cardGroups[player].children].forEach(card => {card.disabled=locked[player]});
   if (locked.every(Boolean)) {
@@ -2018,13 +2044,12 @@ function drawPedroCrying(tile,state,clock){
   }
   ctx.restore();
 }
-function drawMaykimHD(a,tile,state,moving){
+function drawMaykimHD(a,tile,moving){
  const image=a.charge?maykimBikeFor(a,fighters[1-a.i]):tile;
  if(!image?.complete || !image.naturalWidth)return;
  const clock=(last||0)/1000,scale=.42;
  const bob=a.charge?Math.sin(clock*30)*1.4:moving&&!a.action?Math.abs(Math.sin(clock*12))*2:0;
- const squat=state==='crouch'?.72:1;
- ctx.save();ctx.translate(a.x,a.y-bob);ctx.scale(a.face,squat);ctx.drawImage(image,-384*scale,-720*scale,768*scale,768*scale);ctx.restore();
+ ctx.save();ctx.translate(a.x,a.y-bob);ctx.scale(a.face,1);ctx.drawImage(image,-384*scale,-720*scale,768*scale,768*scale);ctx.restore();
 }
 function drawDownFrame(tile){
  const name=tile.src.split('1-hd-')[1]?.replace(/\.webp(?:\?.*)?$/,'');
@@ -2092,7 +2117,6 @@ function fighter(a,pressed = keys) {
     : special ? 'special'
     : a.action ? (a.label === 'CHUTE' ? 'kick' : 'punch')
     : a.y < ground ? (a.kind===0 || a.kind===1 || a.kind >= 2 ? 'jump' : 'kick')
-    : a.kind===9 && !a.ascended ? 'idle'
     : a.frenzy ? 'run'
     : moving ? (a.buff || a.moveTime > .32 ? 'run' : 'walk')
     : a.kind===9 && a.ascended ? 'guard' : 'idle';
@@ -2107,26 +2131,43 @@ function fighter(a,pressed = keys) {
   }
   const alfredoCast=a.kind===12 && alfredoCastFrames[state];
   const transformed=a.kind===14 && a.baby>0;
-  const tiles=alfredoCast || (state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
+  const highResolution = !alfredoCast && !transformed && loadRosterHD(a.kind)?.[state];
+  const useHighResolution = highResolution && highResolution.every(image => image.complete && image.naturalWidth);
+  const tiles=(useHighResolution && highResolution) || alfredoCast || (state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
   const animatedAttack=['hug','spit','special','punch','kick','teleport','pill','cheese','bat','wallet'].includes(state);
   const remaining=embrace?.a===a ? .42*(1-embrace.time/.58) : a.action;
   const duration=a.kind<=2 || a.kind>=13 ? (a.actionDuration || .42) : .42;
-  const frameIndex=alfredoCast ? alfredoCastFrame(state,a.action) : animatedAttack && a.action
+  const maykimJump = a.kind===2 && state==='jump';
+  const maykimRise = a.kind===2 && state==='rise' && a.tumble>0;
+  const frameIndex=maykimJump ? (a.y < ground-35 ? 1 : a.vy < 0 ? 0 : 2)
+    : maykimRise ? (a.tumble > .10 ? 0 : 1)
+    : alfredoCast ? alfredoCastFrame(state,a.action) : animatedAttack && a.action
     ? Math.max(0,Math.min(tiles.length-1,Math.floor((1-Math.min(duration,remaining)/duration)*tiles.length)))
-    : Math.floor((last || 0)/(moving ? 105 : 245))%tiles.length || 0;
+    : Math.floor((last || 0)/(moving || (useHighResolution && (state==='run' || state==='walk')) ? 105 : 245))%tiles.length || 0;
   const chargeFrame = a.kind===0 && state==='charge' ? Math.min(tiles.length-1,Math.floor((.56-a.charge)/.56*tiles.length)) : a.kind===3 && (state==='transform' || state==='dash')
     ? Math.min(tiles.length-1,Math.max(0,Math.floor((state==='transform' ? (.62-a.charge)/.14 : (.48-a.charge)/.48)*tiles.length)))
     : frameIndex;
   const preferred=tiles[chargeFrame];
   const tile=preferred?.complete && preferred.naturalWidth ? preferred : sprites[a.kind].idle.find(image=>image.complete && image.naturalWidth);
   if(a.kind===2){
-    drawMaykimHD(a,tile,state,moving);
+    drawMaykimHD(a,tile,moving);
   }else if(a.kind===1){
     drawDownHD(a,tile,state,moving);
   }else if(a.kind===0){
     drawPedroHD(a,tile,state,moving);
   }else if(transformed){
     drawBabyChampion(a,state,moving);
+  }else if(useHighResolution){
+    const scale = a.kind===9 && a.ascended ? .57 : .48;
+    const evolutionScale = a.kind===7 ? 1 + evolution(a)*.07 : 1;
+    const breathing = state==='idle' ? Math.sin((last || 0)*.0035)*.003 : 0;
+    const sprite = a.kind===7 && a.regen ? regenerationSprite(tile) : tile;
+    ctx.save();
+    ctx.translate(a.x,a.y);
+    ctx.scale(a.face*scale*evolutionScale,scale*evolutionScale*(1+breathing));
+    if(a.kind===10) drawGrowingHead(sprite,a,512,512,-32);
+    else ctx.drawImage(sprite,-256,-480);
+    ctx.restore();
   }else if(tile?.complete && tile.naturalWidth){
     const scale = a.kind===0 ? (state==='charge' ? 1.10 : state==='special' ? .97 : 1.4) : a.kind===14 ? (a.baby>0 ? .67 : state==='special' ? 1 : 1.38) : a.kind===13 ? (state==='special' || state==='wallet' ? 1 : 1.38) : a.kind===12 ? 1.53 : a.kind===11 ? (state==='special' || state==='dash' ? 1.10 : 1.53) : a.kind===9 ? (state==='special' || state==='cheese' ? 1.03 : a.ascended ? 1.69 : 1.52) : a.kind===8 ? (state==='sleep' ? .78 : state==='special' ? 1.13 : 1.45) : a.kind===7 ? (state==='special' || state==='pill' ? 1.05 : 1.53)*(1+evolution(a)*.07) : a.kind===3 ? (state==='transform' || state==='dash' ? .97 : state==='special' ? .9 : 1.51)
       : a.kind === 5 ? (state==='special' || state==='teleport' ? .98 : 1.34) : a.kind===6 ? (state==='special' || state==='call' ? 1.02 : 1.35) : a.kind === 2 || a.kind === 4 ? 1.33 : tile.naturalHeight > 110 ? 1.08 : 1.57;
