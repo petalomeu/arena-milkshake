@@ -57,6 +57,52 @@ function playClip(name) {
   clip.play().catch(() => {});
 }
 
+const combatCategories = [
+  'punch_light','punch_heavy','kick_light','kick_heavy','body_impact','heavy_collision',
+  'block','ground_impact','dash','jump','energy_charge','energy_release','projectile','generic_explosion'
+];
+const combatAudioBytes = typeof fetch==='function'
+  ? fetch('combate-sfx.wav').then(response=>response.ok ? response.arrayBuffer() : null).catch(()=>null)
+  : Promise.resolve(null);
+const combatVoices = new Set();
+const combatLastPlayed = new Map();
+const combatVariants = new Map();
+let combatAudioBuffer, combatAudioContext;
+function warmCombatAudio() {
+  if(!audio?.decodeAudioData || combatAudioContext===audio)return;
+  const context=audio;
+  combatAudioContext=context;
+  combatAudioBytes.then(bytes=>bytes && context.decodeAudioData(bytes.slice(0)))
+    .then(buffer=>{if(context===audio)combatAudioBuffer=buffer;}).catch(()=>{});
+}
+function playCombatSound(name) {
+  const match=typeof name==='string' && /^combat:([a-z_]+):([01])$/.exec(name);
+  if(!match || !combatAudioBuffer || audio?.state!=='running')return;
+  const index=combatCategories.indexOf(match[1]);
+  if(index<0 || combatVoices.size>=7)return;
+  const now=audio.currentTime;
+  if(now-(combatLastPlayed.get(match[1]) ?? -1)<.045)return;
+  combatLastPlayed.set(match[1],now);
+  syncDeafnessAudio();
+  const source=audio.createBufferSource();
+  const gain=audio.createGain();
+  source.buffer=combatAudioBuffer;
+  gain.gain.value=match[1]==='body_impact' ? .50 :
+    match[1]==='heavy_collision' ? .42 : match[1]==='block' ? .57 : .35;
+  source.connect(gain).connect(pedroAudioBus);
+  combatVoices.add(source);
+  source.onended=()=>{combatVoices.delete(source);source.disconnect();gain.disconnect();};
+  source.start(0,(index*2+Number(match[2]))*.42,.42);
+}
+function combatCue(category) {
+  if(online?.role==='guest')return;
+  const variant=combatVariants.get(category) ?? 0;
+  combatVariants.set(category,1-variant);
+  const name='combat:'+category+':'+variant;
+  if(online?.role==='host')sendOnline({type:'audio',name});
+  playCombatSound(name);
+}
+
 const frameCounts = {idle:2,walk:2,run:2,punch:3,kick:3,guard:1,hurt:2,fall:1,rise:1,special:3};
 function loadFrame(name) {
   const image = new Image();
@@ -207,6 +253,7 @@ const cardGroups = [...document.querySelectorAll('.fighter-cards')];
 const stageCards = [...document.querySelectorAll('.stage-card')];
 const visibleHeadGrowth=[0,0];
 let fighters, effects, time, phase, banner, last, embrace, audio, reaction, reactionStarted, waitingForPedro;
+let impactHold;
 let pedroAudioBus;
 // Use the arena's actual transition state for both fear and its damage penalty.
 function inAdelia(){return Boolean(fighters?.some(f=>f.ascended));}
@@ -292,6 +339,7 @@ clips.pedroDeath.addEventListener('ended',finishPedroLine);
 clips.pedroDeath.addEventListener('error',finishPedroLine);
 
 function reset(playing) {
+  impactHold=null;
   for(const clip of Object.values(clips)) clip.muted=false;
   if(pedroAudioBus)pedroAudioBus.gain.value=1;
   stopMatheusAudio();
@@ -353,17 +401,20 @@ function updateGuard(a,dt,pressed=keys,feedback=true){
   a.guardDelay=Math.max(0,delay-dt);
   a.guardEnergy=Math.min(100,a.guardEnergy+Math.max(0,dt-delay)*30);
 }
-function guardBlocks(a,cost=25){
+function guardBlocks(a,cost=25,basic=false){
   if(!isDefending(a))return false;
   a.guardEnergy=Math.max(0,a.guardEnergy-cost);a.guardDelay=1;
   if(a.guardEnergy<1e-8){breakGuard(a);return true;}
-  if(!a.blockFlash)sound('block');
+  if(!a.blockFlash){
+    if(basic)combatCue('block');
+    else sound('block');
+  }
   a.blockFlash=.24;
   return true;
 }
-function hit(a,b,damage,push,stun,grab = false, blanketHit = false, specialSlot = 0) {
+function hit(a,b,damage,push,stun,grab = false, blanketHit = false, specialSlot = 0, basic = '') {
   if (!b.hp || (a.kind===8 && (b.asleep || b.sleepRecovery) && !blanketHit)) return false;
-  if(guardBlocks(b,specialSlot ? 25 : a.label==='CHUTE' ? 15 : 10))return false;
+  if(guardBlocks(b,specialSlot ? 25 : a.label==='CHUTE' ? 15 : 10,Boolean(basic)))return false;
   const before=b.hp;
   const growth=evolution(a);
   const power=a.kind===7 ? .42+growth*.12 : 1;
@@ -374,7 +425,13 @@ function hit(a,b,damage,push,stun,grab = false, blanketHit = false, specialSlot 
   }
   const sleepPower=a.kind===8 && (b.asleep || b.nap) ? 1.25 : 1;
   const sleepDefense=b.kind===8 && (a.asleep || a.nap) ? .8 : 1;
-  damageFighter(b,damage*pedroPower(a,b)*(a.buff ? 1.45 : 1)*power*sleepPower*sleepDefense*(a.ascended ? 1.35 : 1)*(1+growthBonus)*(a.kind===14 ? (a.baby>0 ? 1.65 : 1.15) : 1),true);
+  damageFighter(b,damage*pedroPower(a,b)*(a.buff ? 1.45 : 1)*power*sleepPower*sleepDefense*(a.ascended ? 1.35 : 1)*(1+growthBonus)*(a.kind===14 ? (a.baby>0 ? 1.65 : 1.15) : 1),!basic);
+  if(basic && before>b.hp){
+    const heavy=basic.endsWith('_heavy');
+    combatCue('body_impact');
+    if(heavy)combatCue('heavy_collision');
+    effects.push({kind:'basic-impact',owner:a.i,x:b.x-a.face*19,y:b.y-105,time:0,heavy});
+  }
   if(a.kind===1 && before>b.hp)a.affection=3;
   if(a.kind===14 && a.baby>0 && specialSlot===0 && before>b.hp){
     effects.push({kind:'dedew-quake',owner:a.i,x:b.x,y:ground,face:a.face,time:0});
@@ -509,7 +566,9 @@ function attack(a,b,slot) {
   if (slot === 3) {
     a.label = 'CHUTE';
     if(a.kind===14 && a.baby>0) a.action=a.actionDuration=.28;
-    if (close && gap < 146) hit(a,b,13,290,.24);
+    const cue=a.kind===14 && a.baby>0 ? '' : a.y<ground ? 'kick_light' : 'kick_heavy';
+    if(cue)combatCue(cue);
+    if (close && gap < 146) hit(a,b,13,290,.24,false,false,0,cue);
   } else if (slot === 0) {
     a.label = 'ATAQUE';
     if(a.kind===14 && a.baby>0) a.action=a.actionDuration=.28;
@@ -524,8 +583,11 @@ function attack(a,b,slot) {
       }
       return;
     }
-    playClip(a.kind === 1 ? 'slap' : 'punch');
-    if (close && gap < 112) hit(a,b,9,190,.18);
+    const cue=a.kind===1 || (a.kind===14 && a.baby>0) ? '' :
+      a.buff || a.ascended ? 'punch_heavy' : 'punch_light';
+    if(cue)combatCue(cue);
+    else playClip(a.kind===1 ? 'slap' : 'punch');
+    if (close && gap < 112) hit(a,b,9,190,.18,false,false,0,cue);
   } else if (slot === 1 && a.kind === 0) {
     a.label = 'MATADOR DE ONÇA';
     playClip('bull');
@@ -560,10 +622,12 @@ function attack(a,b,slot) {
     a.tech=powered ? 0 : a.tech+1;
     if (powered) a.cool[slot]*=.85;
     a.label=slot===1 ? 'PODER DOS TABLETS' : 'TACO DE BEISEBALL';
+    combatCue(slot===1 ? 'energy_charge' : 'projectile');
     effects.push({kind:slot===1 ? 'tablet-ship' : 'battery',owner:a.i,
       x:slot===1 ? (a.face>0 ? -68 : 1028) : a.x,y:a.y,face:a.face,
       time:0,hit:false,powered,nextDrop:.23});
   } else if (a.kind===11) {
+    combatCue('energy_charge');
     if (slot===1) {
       a.label='GOLPE DA FELICIDADE';
       effects.push({kind:'joy-heart',slot:1,owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
@@ -861,6 +925,7 @@ function startFight() {
   if (Audio) {
     audio ??= new Audio();
     audio.resume().catch(() => {});
+    warmCombatAudio();
   }
   selection.hidden=true;
   canvas.hidden=false;
@@ -1043,6 +1108,8 @@ function update(dt) {
       }
       if (a.kind===11 && a.charge===0 && a.hp) {
         const x=Math.max(55,Math.min(905,a.x));
+        combatCue('energy_release');
+        combatCue('projectile');
         effects.push({kind:'joy-heart',owner:a.i,x,y:a.y,face:Math.sign(b.x-x)||a.face,time:0,hit:false});
       }
       if (a.kind!==11 && distance>0 && !a.chargedHit && Math.abs(a.x-b.x)<110 && b.y>ground-68) {
@@ -1133,6 +1200,8 @@ function updateTechEffect(effect,attacker,target,dt) {
   if (effect.kind==='tablet-ship') {
     const interval=effect.powered ? .18 : .29;
     while(effect.time>=effect.nextDrop && effect.nextDrop<1.55) {
+      if(effect.nextDrop===.23)combatCue('energy_release');
+      combatCue('projectile');
       const {x,y}=techPosition(effect,effect.nextDrop);
       effects.push({kind:'tablet',owner:effect.owner,x,y,time:0,hit:false,powered:effect.powered});
       effect.nextDrop+=interval;
@@ -1172,6 +1241,7 @@ function updateTechEffect(effect,attacker,target,dt) {
     const blast={kind:'tablet-blast',owner:effect.owner,x:point.x,y:Math.min(ground,point.y),
       time:0,radius,combo:Boolean(tablet)};
     effects.push(blast);
+    combatCue('generic_explosion');
     if (target.hp && (body || Math.hypot(target.x-blast.x,target.y-75-blast.y)<=radius)) {
       effectHit(blast,{...attacker,face:effect.face},target,tablet ? (powered ? 29 : 24) : (powered ? 18 : 15),350,.38);
     }
@@ -1197,11 +1267,12 @@ function effectPosition(effect) {
   return effect.x+effect.face*(68+490*Math.max(0,effect.time-.40));
 }
 function oldTimeForFoon(effect,dt){return Math.max(0,effect.time-dt);}
-const visualEffectDuration={'victim-impact':.48,'charge-dust':.83,'tablet-pixels':.82,'toscana-crumbs':.78,'heart-burst':.48};
+const visualEffectDuration={'victim-impact':.48,'charge-dust':.83,'tablet-pixels':.82,'toscana-crumbs':.78,'heart-burst':.48,'basic-impact':.21};
 const rescueEnd=1.52;
 function updateEffects(dt) {
   for (const effect of effects) {
     if(visualEffectDuration[effect.kind]){effect.time+=dt;continue;}
+    const previousTime=effect.time;
     const old=effectPosition(effect);
     effect.time+=dt;
     if(effect.kind==='money-truck'){
@@ -1254,6 +1325,10 @@ function updateEffects(dt) {
     if (effect.kind==='joy-heart') {
       const x=effectPosition(effect);
       const direct=effect.slot===1;
+      if(direct && previousTime<.17 && effect.time>=.17){
+        combatCue('energy_release');
+        combatCue('projectile');
+      }
       if (!effect.hit && (!direct || effect.time>=.17) && target.hp && Math.abs(target.y-effect.y)<82 &&
           target.x>=Math.min(old,x)-34 && target.x<=Math.max(old,x)+34) {
         effectHit(effect,{...attacker,face:effect.face},target,direct ? 14 : 19,direct ? -260 : 290,direct ? .25 : .32);
@@ -1799,10 +1874,23 @@ function drawImpactParticle(form,color,size) {
     if(form==='coin')oval(-size*.15,-size*.15,size*.5,size*.34,'#fff3af');
   }
 }
-const foregroundEffects=new Set(['tablet','tablet-pixels','toscana-crumbs']);
+const foregroundEffects=new Set(['tablet','tablet-pixels','toscana-crumbs','basic-impact']);
 function drawEffects(layer) {
   for (const effect of effects) {
     if(effect.kind!=='rescue' && layer && foregroundEffects.has(effect.kind)!==(layer==='front'))continue;
+    if(effect.kind==='basic-impact'){
+      const progress=effect.time/visualEffectDuration[effect.kind];
+      const rays=effect.heavy && !reduceMotion.matches ? 7 : 4;
+      ctx.save();
+      ctx.globalAlpha=(1-progress)*(reduceMotion.matches ? .50 : .90);
+      ctx.translate(effect.x,effect.y);
+      for(let i=0;i<rays;i++){
+        ctx.rotate(2*Math.PI/rays);
+        rect(7+progress*20, -1, (effect.heavy ? 17 : 10)*(1-progress), 2, i%2 ? '#ffba66' : '#fff3dc');
+      }
+      ctx.restore();
+      continue;
+    }
     if(effect.kind==='charge-dust'){
       const p=effect.time/visualEffectDuration[effect.kind];
       const dust=chargeDust[p>.24 ? 1 : 0];
@@ -2083,7 +2171,10 @@ function moveFighter(a,b,pressed,dt) {
   const guarding=isDefending(a,pressed);
   const direction = a.frenzy && !guarding ? (Math.abs(gap)>82 ? Math.sign(gap) : 0)
     : Number(pressed.has(a.keys[1]))-Number(pressed.has(a.keys[0]));
+  const beforeMove=a.moveTime;
   a.moveTime = direction ? a.moveTime+dt : 0;
+  if (phase==='fight' && !guarding && !a.frenzy && beforeMove<=.32 && a.moveTime>.32 &&
+      (direction<0 ? a.x>55 : a.x<905)) combatCue('dash');
   if (a.kind===9 && (direction || pressed.has(a.keys[2]))) a.orsiStood=true;
   a.x += direction*fighterMoveSpeed(a,guarding)*dt;
   if (pressed.has(a.keys[2])) jump(a,pressed);
@@ -2096,14 +2187,21 @@ function fighterMoveSpeed(a,guarding) {
   return base*(a.moveTime>.32 ? 1 : .69)*(a.buff ? 1.52 : a.frenzy ? 1.78 : a.ascended ? 1.32 : 1)*slow;
 }
 function jump(a,pressed) {
-  if (a.y === ground && !a.frozen && !a.stun && !a.guardBreak && !a.snare && !a.asleep && !a.sleepRecovery && !a.nap && !a.bedWalk && !a.charge && !pressed.has(a.keys[3])) a.vy=-520;
+  if (a.y === ground && !a.frozen && !a.stun && !a.guardBreak && !a.snare && !a.asleep && !a.sleepRecovery && !a.nap && !a.bedWalk && !a.charge && !pressed.has(a.keys[3])) {
+    if(phase==='fight' && a.vy>=0)combatCue('jump');
+    a.vy=-520;
+  }
 }
 function applyMomentum(a,dt) {
   a.x = Math.max(55,Math.min(905,a.x+a.vx*dt));
   a.vx *= Math.exp(-7*dt);
+  const wasAirborne=a.y<ground;
   a.vy += 1300*dt;
   a.y = Math.min(ground,a.y+a.vy*dt);
-  if (a.y === ground) a.vy = 0;
+  if (a.y === ground) {
+    if(phase==='fight' && wasAirborne && a.vy>240)combatCue('ground_impact');
+    a.vy = 0;
+  }
 }
 
 function rect(x,y,w,h,color) {
@@ -2677,10 +2775,27 @@ function frame(now) {
   if(quake && phase==='fight') ctx.translate(Math.sin(quake.time*110)*4*(1-quake.time/.26),Math.cos(quake.time*90)*2);
   arena();
   drawEffects('back');
-  fighter(fighters[0]);
+  if(!online && phase==='fight' && !reduceMotion.matches){
+    const impact=effects.find(effect=>effect.kind==='basic-impact' && effect.heavy && effect.time<.055);
+    if(impact && impact!==impactHold?.impact){
+      impactHold={impact,until:now+34,poses:fighters.map(fighter=>({...fighter})),time:now};
+    }
+  }
+  // Hold only the rendered poses. The simulation and input continue each frame.
+  const hold=!online && phase==='fight' && !reduceMotion.matches && now<impactHold?.until ? impactHold : null;
+  if(hold){
+    try {
+      last=hold.time;
+      hold.poses.forEach(pose=>fighter(pose));
+    } finally {
+      last=now;
+    }
+  } else {
+    fighter(fighters[0]);
+  }
   if (online?.role==='guest' && phase==='fight') {
     fighter(advanceGuestVisual(dt),online.localKeys);
-  } else {
+  } else if(!hold) {
     fighter(fighters[1]);
   }
   drawEffects('front');
@@ -2807,7 +2922,10 @@ function receiveOnline(message) {
       }
       break;
     case 'audio':
-      if (guest && Object.hasOwn(clips,message.name)) playClip(message.name);
+      if (guest) {
+        if (Object.hasOwn(clips,message.name)) playClip(message.name);
+        else playCombatSound(message.name);
+      }
       break;
     case 'selection':
       showCharacters();
@@ -3076,7 +3194,3 @@ document.addEventListener('fullscreenchange',()=>{
 });
 showCharacters();
 requestAnimationFrame(frame);
-
-
-
-
