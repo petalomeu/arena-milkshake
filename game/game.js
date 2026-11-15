@@ -5,7 +5,14 @@ ctx.imageSmoothingEnabled = true;
 ctx.imageSmoothingQuality = 'high';
 const start = document.querySelector('#start');
 const keys = new Set();
-const stageNames = ['Milkshake Down','Arena de Combate'];
+const arenaProfiles = [
+  {name:'Milkshake Down',id:'milkshake',accent:'#ff79bf'},
+  {name:'Arena de Combate',id:'ure',accent:'#ffca6b'},
+  {name:'Fazenda do Berranteiro',id:'fazenda',accent:'#ffc06e'},
+  {name:'Gráfica do Matheus',id:'grafica',accent:'#c895ff'},
+  {name:'Cofre do Grau',id:'cofre',accent:'#ffda67'},
+];
+const stageNames = arenaProfiles.map(({name})=>name);
 const selection = document.querySelector('#selection');
 const characterScreen = document.querySelector('#characters');
 const stageScreen = document.querySelector('#stages');
@@ -14,9 +21,9 @@ let stageIndex = 0;
 let online = null;
 let countdown=0,fightCue=0;
 const cpu={active:false,think:0,guard:0,jump:0,move:0};
-const stages = ['lanchonete.webp','arena-combate.webp'].map(file => {
+const stages = arenaProfiles.map(({id}) => {
   const image = new Image();
-  image.src = file;
+  image.src = 'stage-'+id+'.webp';
   return image;
 });
 const clips = Object.fromEntries(Object.entries({
@@ -687,7 +694,7 @@ document.addEventListener('keydown',e => {
       } else if (command === 2) {
         start.click();
       } else {
-        chooseStage((stageIndex+1)%stages.length);
+        chooseStage((stageIndex+stages.length+(command===0 ? -1 : 1))%stages.length);
       }
       break;
     }
@@ -799,6 +806,7 @@ cardGroups.forEach((group,player) => {
   group.parentElement.querySelector('.confirm').onclick=()=>confirmFighter(player);
 });
 function chooseStage(index) {
+  if(!Number.isInteger(index) || !stages[index])return;
   stageIndex=index;
   stageCards.forEach((card,i)=>card.setAttribute('aria-pressed',String(i===index)));
 }
@@ -2207,7 +2215,7 @@ function drawSchool() {
   }
   for(let i=0;i<6;i++) rect(285+i*77,427,49,3,'#aca8ba');
 }
-function arena() {
+function drawLegacyArena() {
   if (inAdelia()) { drawSchool(); return; }
   const index=stageIndex;
   const image=stages[index];
@@ -2235,6 +2243,135 @@ function arena() {
   shade.addColorStop(0,'#12091be8');
   shade.addColorStop(1,'#12091b00');
   rect(0,0,960,106,shade);
+}
+
+const arenaCrowd=[0,1,2,3].map(index=>loadFrame('stage-crowd-'+index));
+const arenaFlags=[0,1].map(index=>loadFrame('stage-flag-'+index));
+const pastureBulls=[0,1].map(index=>loadFrame('stage-bull-'+index));
+const adeliaHD=new Image();
+adeliaHD.src='stage-adelia.webp';
+const adeliaProfile={id:'adelia',name:'Adélia',accent:'#b8b3ff'};
+const arenaLayouts={
+  milkshake:{screen:[342,78,276,77],stands:[[55,217,41],[130,225,40],[225,240,42],[732,241,43],[823,228,41],[902,220,40]]},
+  ure:{screen:[344,81,272,94],stands:[[61,229,45],[149,225,44],[246,237,39],[712,237,39],[808,225,44],[899,230,44]]},
+  fazenda:{screen:[339,87,282,89],stands:[[47,228,38],[122,232,40],[197,247,38],[762,247,38],[842,235,40],[913,228,38]]},
+  grafica:{screen:[351,85,259,83],stands:[[58,235,39],[142,241,43],[210,253,37],[753,253,39],[829,240,41],[910,235,38]]},
+  cofre:{screen:[352,82,257,81],stands:[[67,232,40],[147,230,42],[215,246,36],[742,246,37],[823,230,42],[899,231,40]]},
+  adelia:{screen:[344,69,274,99],stands:[[47,224,39],[112,232,42],[195,242,43],[765,242,43],[847,232,42],[910,224,39]]},
+};
+function activeStageReaction(id) {
+  if(id==='fazenda')return fighters.some(a=>a.kind===0 && a.charge) ? 'MATADOR DE ONÇA' : '';
+  if(id==='grafica'){
+    const casting=fighters.some(a=>a.kind===10 && a.action>0 &&
+      (a.label==='OVO IMPRIMIR EM' || a.label==='SUPERENXAQUECA'));
+    return casting || effects.some(e=>e.kind==='print') ? 'GRÁFICA ATIVA' : '';
+  }
+  if(id==='cofre')return effects.some(e=>e.kind==='money-truck') ? 'TIO PATINHAS' : '';
+  return '';
+}
+function drawArenaScreen(profile,box,t,reaction) {
+  const [x,y,w,h]=box;
+  ctx.save();
+  ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+  const fill=ctx.createLinearGradient(x,y,x,y+h);
+  fill.addColorStop(0,'#211947');fill.addColorStop(1,'#0b091c');
+  rect(x,y,w,h,fill);
+  const barWidth=w/24;
+  for(let i=0;i<24;i++){
+    const height=(.5+.5*Math.sin(t*5+i*.72))*h*.24+3;
+    ctx.globalAlpha=reaction ? .85 : .48;
+    rect(x+i*barWidth+1,y+h-height-2,barWidth-2,height,profile.accent);
+  }
+  ctx.globalAlpha=.18;
+  rect(x,y+(t*31)%h,w,3,profile.accent);
+  ctx.globalAlpha=1;
+  const heading=reaction || (profile.id==='ure' ? 'CAMPEÕES DA URE' : profile.name.toUpperCase());
+  text(heading,x+w/2,y+h*.31,Math.min(19,w/13),profile.accent);
+  if(fighters.length===2){
+    text(String(Math.ceil(countdown>0 ? countdown : time)),x+w/2,y+h*.66,Math.min(22,h*.31),'#ffffff');
+    fighters.forEach((fighter,index)=>{
+      const width=w*.28,position=index ? x+w-width-11 : x+11;
+      rect(position,y+h*.58,width,5,'#413553');
+      const health=width*Math.max(0,fighter.hp)/100;
+      rect(index ? position+width-health : position,y+h*.58,health,5,fighter.color);
+    });
+  }
+  ctx.restore();
+}
+function drawArenaCrowd(stands,t,energized) {
+  stands.forEach(([x,y,width],index)=>{
+    const wave=t*(energized ? 7 : 3)+index*1.9;
+    const group=index%3===0 ? arenaFlags : arenaCrowd;
+    const pose=group[Math.floor(wave)%group.length];
+    if(!readyImage(pose))return;
+    ctx.save();
+    ctx.globalAlpha=.82;
+    ctx.beginPath();ctx.rect(x-width*.65,y-48,width*1.3,48);ctx.clip();
+    drawEffectSprite(pose,x+Math.sin(wave)*2,y-Math.max(0,Math.sin(wave))*3,width,index%2 ? -1 : 1);
+    ctx.restore();
+  });
+}
+function drawStageDetails(id,t,reaction) {
+  if(id==='fazenda'){
+    for(let i=0;i<2;i++){
+      const distance=(t*14+i*103)%184;
+      const face=distance<92 ? 1 : -1;
+      const bull=pastureBulls[Math.floor(t*4+i)%2];
+      if(readyImage(bull))drawEffectSprite(bull,395+(face===1 ? distance : 184-distance),254+i*5,58-i*10,face);
+    }
+    if(reaction){
+      ctx.save();
+      for(let i=0;i<8;i++){
+        const p=(t*1.9+i/8)%1;
+        const puff=chargeDust[i%2];
+        ctx.globalAlpha=(1-p)*.47;
+        if(readyImage(puff))drawEffectSprite(puff,105+i*104+p*30,322-p*14,78+p*40,1);
+      }
+      ctx.restore();
+    }
+  }else if(id==='grafica'){
+    const rate=reaction ? 2.4 : .46;
+    for(let i=0;i<8;i++){
+      const p=(t*rate+i/8)%1;
+      const x=(i%2 ? 685 : 240)+Math.sin(i*4+t)*24+(i%2 ? -1 : 1)*p*85;
+      ctx.save();ctx.translate(x,246-p*71);ctx.rotate(i*.6+t*.8);
+      ctx.globalAlpha=.68*(1-p);rect(-8,-4,16,10,'#f2dcff');rect(-5,-1,9,1,'#8a65bd');
+      ctx.restore();
+    }
+    if(reaction)for(const x of [213,747])oval(x,259,57,13,'#c060fb58');
+  }else if(id==='cofre'){
+    const truck=maykimTrucks[0];
+    if(readyImage(truck)){
+      drawEffectSprite(truck,252+(reaction ? Math.sin(t*2)*11 : 0),321,118,1);
+      drawEffectSprite(truck,715+(reaction ? Math.sin(t*2+1)*11 : 0),322,108,-1);
+    }
+    if(!reaction)return;
+    for(let i=0;i<12;i++){
+      const p=(t*1.3+i/12)%1;
+      const coin=truckCoins[Math.floor(t*12+i)%2];
+      if(!readyImage(coin))continue;
+      ctx.save();ctx.globalAlpha=.77*(1-p);
+      const width=7+Math.abs(Math.cos(t*10+i))*6;
+      ctx.drawImage(coin,(i%2 ? 722 : 216)+Math.sin(i*5)*43,147+p*142,width,15);
+      ctx.restore();
+    }
+  }
+}
+function arena() {
+  const adelia=inAdelia();
+  const profile=adelia ? adeliaProfile : arenaProfiles[stageIndex];
+  const image=adelia ? adeliaHD : stages[stageIndex];
+  if(!readyImage(image)){drawLegacyArena();return;}
+  ctx.drawImage(image,0,0,960,500);
+  const t=reduceMotion.matches ? 0 : Math.max(0,(last || 0)/1000);
+  const reaction=activeStageReaction(profile.id);
+  const layout=arenaLayouts[profile.id];
+  drawStageDetails(profile.id,t,reaction);
+  drawArenaCrowd(layout.stands,t,Boolean(reaction));
+  drawArenaScreen(profile,layout.screen,t,reaction);
+  const shade=ctx.createLinearGradient(0,0,0,90);
+  shade.addColorStop(0,'#12091be3');shade.addColorStop(1,'#12091b00');
+  rect(0,0,960,90,shade);
 }
 
 const regenerationSprites=new WeakMap();
