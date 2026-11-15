@@ -111,7 +111,7 @@ const maykimTruckCast = ['a','b'].map(phase=>maykimHD('cast-2'+phase));
 const downHDCast = [1,2].map(slot=>['a','b'].map(phase=>downHD('cast-'+slot+phase)));
 const printedWeaponPoses = [0,1,2].map(tier=>{
   const pose = state=>loadFrame('10-hd-weapon-'+tier+'-'+state);
-  return {ready:pose('ready'),strike:pose('strike'),walk:[pose('walk-0'),pose('walk-1')]};
+  return {ready:pose('ready'),guard:pose('guard'),strike:pose('strike'),walk:[pose('walk-0'),pose('walk-1')]};
 });
 const gabrielSleep = [0,1].map(frame=>loadFrame('8-hd-sleep-'+frame));
 const gabrielProjection = [0,1].map(frame=>loadFrame('8-hd-projection-'+frame));
@@ -149,7 +149,10 @@ const nurses = [0,1,2].map(i=>loadFrame('4-nurse-'+i));
 const chocolate = loadFrame('4-chocolate-0');
 const printedItemSprites = [0,1,2].map(i=>loadFrame('10-item-'+i));
 const guineaFowl = [0,1].map(i=>loadFrame('6-bird-'+i));
+const guineaFowlHD = [0,1].map(i=>loadFrame('6-hd-trap-bird-'+i));
 const sleepBlanket=loadFrame('8-blanket-0');
+const flyingBlanketHD=loadFrame('8-hd-blanket-flight');
+const sleepBlanketHD=loadFrame('8-hd-blanket-cover');
 const physio=[orsiPose('physio-ready'),orsiPose('physio-release')];
 const legacyPhysio=[0,1].map(i=>loadFrame('9-physio-'+i));
 const tabletShip=loadFrame('12-ship-0');
@@ -373,6 +376,10 @@ function hit(a,b,damage,push,stun,grab = false, blanketHit = false, specialSlot 
   b.flash = .18;
   const cast=a.specialsInProgress?.[specialSlot];
   if (cast) cast.remaining=Math.max(cast.remaining,Math.max(.18,stun));
+  if(specialSlot && a.kind!==3 && before>b.hp) {
+    effects.push({kind:'victim-impact',owner:a.i,target:b.i,sourceKind:a.kind,slot:specialSlot,
+      x:b.x,y:b.y,face:a.face,time:0});
+  }
   return true;
 
 }
@@ -447,6 +454,9 @@ function specialHit(a,b,slot,damage,push,stun,grab=false,blanketHit=false) {
 function effectHit(effect,a,b,damage,push,stun,grab=false,blanketHit=false) {
   return specialHit(a,b,specialEffectSlots[effect.kind] ?? 0,damage,push,stun,grab,blanketHit);
 }
+function defaultActionDuration(kind,slot) {
+  return (slot===1 || slot===2) && kind!==3 ? .74 : .42;
+}
 function advanceSpecialCooldowns(dt) {
   for (const a of fighters) {
     const opponent=fighters[1-a.i];
@@ -478,8 +488,7 @@ function attack(a,b,slot) {
   a.cool[slot] = cooldownFor(a,slot);
   a.recovery=a.kind===14 && a.baby>0 && (slot===0 || slot===3) ? (slot===0 ? .34 : .50) : slot===0 ? .68 : slot===3 ? .82 : .70;
   startSpecial(a,slot);
-  a.action = .42;
-  a.actionDuration=.42;
+  a.action=a.actionDuration=defaultActionDuration(a.kind,slot);
   const close = Math.abs(a.y-b.y) < 75;
   const gap = Math.abs(a.x-b.x);
   if (slot === 3) {
@@ -510,7 +519,7 @@ function attack(a,b,slot) {
     
   } else if (a.kind===14) {
     if(slot===1){
-      a.label='ESGUICHO DO CAFÉ';a.action=a.actionDuration=.62;
+      a.label='ESGUICHO DO CAFÉ';a.action=a.actionDuration=.82;
       sound('sip');
       effects.push({kind:'dedew-coffee',owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
     }else{
@@ -522,12 +531,12 @@ function attack(a,b,slot) {
   } else if (a.kind===13) {
     if (slot===1) {
       a.label='MOLHO DE PIMENTA';
-      a.action=a.actionDuration=.60;
+      a.action=a.actionDuration=.82;
       playClip('punch');
       effects.push({kind:'lucreci-fire',owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
     } else if (slot===2) {
       a.label='INVESTIDA DO PATACO';
-      a.action=a.actionDuration=.62;
+      a.action=a.actionDuration=.84;
       playClip('punch');
       effects.push({kind:'lucreci-money',owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
     }
@@ -624,7 +633,7 @@ function attack(a,b,slot) {
       a.label = 'INVESTIDA DO GRAU';
       a.action=a.actionDuration=.65;playClip('mayconDash');beginCharge(a);
     } else {
-      a.label = 'TIO PATINHAS';a.action=a.actionDuration=.72;
+      a.label = 'TIO PATINHAS';a.action=a.actionDuration=.90;
       sound('impact');effects.push({kind:'money-truck',owner:a.i,x:b.x,y:ground,face:a.face,time:0,hit:false});
     }
   } else if (slot === 1) {
@@ -642,12 +651,12 @@ function attack(a,b,slot) {
     }
   } else if (a.kind === 0) {
     a.label = 'FOOOON!';
-    a.action=a.actionDuration=.65;
+    a.action=a.actionDuration=.82;
     playClip('horn');
     effects.push({kind:'foon-wave',owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
   } else {
     a.label = 'GORFINHO DE MORANGO';
-    a.action=a.actionDuration=.72;
+    a.action=a.actionDuration=.88;
     playClip('milk');sound('sip');
     effects.push({kind:'strawberry-spit',owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
   }
@@ -1019,9 +1028,9 @@ function update(dt) {
         if((a.kind===0 || a.kind===2) && landed){b.tumble=.65;b.vy=-220;holdSpecial(a,1,'tumble');}
         a.chargedHit = true;
       }
-    } else if (!a.stun && !a.guardBreak && !isDefending(a)) {
+    } else if (!a.stun && !a.guardBreak) {
       moveFighter(a,b,keys,dt);
-      if (a.frenzy && Math.abs(a.x-b.x)<100 && Math.abs(a.y-b.y)<75 && !a.cool[0] && !a.action && !a.recovery) {
+      if (a.frenzy && !isDefending(a) && Math.abs(a.x-b.x)<100 && Math.abs(a.y-b.y)<75 && !a.cool[0] && !a.action && !a.recovery) {
         a.label='ATAQUE';
         a.action=.30;
         a.cool[0]=.72;
@@ -1164,6 +1173,7 @@ function effectPosition(effect) {
 function oldTimeForFoon(effect,dt){return Math.max(0,effect.time-dt);}
 function updateEffects(dt) {
   for (const effect of effects) {
+    if(effect.kind==='victim-impact'){effect.time+=dt;continue;}
     const old=effectPosition(effect);
     effect.time+=dt;
     if(effect.kind==='money-truck'){
@@ -1292,7 +1302,6 @@ function updateEffects(dt) {
       if (effect.time>=.34 && effect.throwX===undefined) {
         effect.throwX=attacker.x;
         effect.throwY=attacker.y;
-        attacker.action=.30;
       }
       target.blanket=effect.time>=.64 && effect.time<2.14;
       if (!effect.hit && effect.time>=2.10) {
@@ -1378,7 +1387,7 @@ function updateEffects(dt) {
     effect.time=rescue ? .99 : .92;
   }
   const duration={'money-truck':1.55,'strawberry-spit':.85,'down-hearts':.85,'foon-wave':.65,'dedew-coffee':.85,'dedew-quake':.46,rescue:1.15,chocolate:1.05,gas:1.30,teleport:.49,toscana:.56,'guinea-fowl':.94,blanket:2.16,pillow:.85,physio:1.03,cheese:3.4,print:.70,'printed-shot':.65,'joy-heart':.47,'tablet-ship':1.74,tablet:1,battery:1.30,'tablet-blast':.37,'lucreci-fire':.82,'lucreci-money':1.02};
-  effects=effects.filter(effect=>effect.time<duration[effect.kind] && !((effect.kind==='tablet' || effect.kind==='battery') && effect.hit));
+  effects=effects.filter(effect=>effect.time<(effect.kind==='victim-impact' ? .48 : duration[effect.kind]) && !((effect.kind==='tablet' || effect.kind==='battery') && effect.hit));
 }
 
 function drawEffectSprite(image,x,y,width,face) {
@@ -1390,10 +1399,14 @@ function drawEffectSprite(image,x,y,width,face) {
   ctx.drawImage(image,-width/2,-height,width,height);
   ctx.restore();
 }
-function drawGuineaFowl(x,y,face,step) {
+function drawGuineaFowl(x,y,face,step,trapped=false) {
   for (let i=0;i<3;i++) {
-    const bird=guineaFowl[(Math.floor(step*15)+i)%2];
-    drawEffectSprite(bird,x+face*(i-1)*37,y+Math.sin(step*22+i*1.4)*5-i%2*12,70,face);
+    const index=(Math.floor(step*15)+i)%2;
+    const bird=readyImage(guineaFowlHD[index]) ? guineaFowlHD[index] : guineaFowl[index];
+    const angle=step*10+i*Math.PI*2/3;
+    const offset=trapped ? Math.cos(angle)*53 : face*(i-1)*37;
+    const direction=trapped ? Math.sign(-Math.sin(angle)) || face : face;
+    drawEffectSprite(bird,x+offset,y+Math.sin(angle)*(trapped ? 9 : 5),trapped ? 76 : 69,direction);
   }
 }
 
@@ -1405,6 +1418,12 @@ function drawFlyingBlanket(effect,target) {
   ctx.save();
   ctx.translate(x,y);
   ctx.rotate((1-progress)*effect.face*-.47);
+  if(readyImage(flyingBlanketHD)){
+    const height=width*flyingBlanketHD.naturalHeight/flyingBlanketHD.naturalWidth;
+    ctx.drawImage(flyingBlanketHD,-width/2,-height/2,width,height);
+    ctx.restore();
+    return;
+  }
   const wave=Math.sin(progress*13)*9*(1-progress);
   ctx.beginPath();
   ctx.moveTo(-width/2,-14);
@@ -1684,6 +1703,27 @@ function drawMoneyTruck(effect){
 }
 function drawEffects() {
   for (const effect of effects) {
+    if(effect.kind==='victim-impact'){
+      const target=fighters[effect.target];
+      if(!target)continue;
+      const p=effect.time/.48;
+      const color=characters[effect.sourceKind].color;
+      const x=target.x-effect.face*12,y=target.y-93;
+      ctx.save();
+      ctx.globalAlpha=(1-p)*.8;
+      ctx.strokeStyle=color;ctx.shadowColor=color;ctx.shadowBlur=12;
+      ctx.lineWidth=3*(1-p)+1;
+      ctx.beginPath();ctx.ellipse(x,y,22+44*p,17+32*p,.25,0,Math.PI*2);ctx.stroke();
+      for(let i=0;i<7;i++){
+        const angle=i*Math.PI*2/7;
+        const reach=24+p*(40+i%3*9);
+        const dx=Math.cos(angle),dy=Math.sin(angle);
+        ctx.beginPath();ctx.moveTo(x+dx*reach,y+dy*reach*.78);
+        ctx.lineTo(x+dx*(reach+9),y+dy*(reach+9)*.78);ctx.stroke();
+      }
+      ctx.restore();
+      continue;
+    }
     if(effect.kind==='money-truck'){drawMoneyTruck(effect);continue;}
     if(effect.kind==='down-hearts'){drawDownHearts(effect.x,effect.y,effect.time);continue;}
     if(effect.kind==='strawberry-spit'){
@@ -1861,15 +1901,22 @@ function evolution(a) {
   return a.kind===7 ? Math.floor((60-time+1e-6)/10) : 0;
 }
 function moveFighter(a,b,pressed,dt) {
-  if(a.guardBreak || a.frozen)return;
+  if(!a.hp || a.guardBreak || a.frozen || a.tumble)return;
   const gap=b.x-a.x;
-  const direction = a.frenzy ? (Math.abs(gap)>82 ? Math.sign(gap) : 0)
+  const guarding=isDefending(a,pressed);
+  const direction = a.frenzy && !guarding ? (Math.abs(gap)>82 ? Math.sign(gap) : 0)
     : Number(pressed.has(a.keys[1]))-Number(pressed.has(a.keys[0]));
   a.moveTime = direction ? a.moveTime+dt : 0;
   if (a.kind===9 && (direction || pressed.has(a.keys[2]))) a.orsiStood=true;
-  a.x += direction * (a.kind === 0 ? 280 : 222) * (a.moveTime > .32 ? 1 : .69) * (a.buff ? 1.52 : a.frenzy ? 1.78 : a.ascended ? 1.32 : 1) * (a.slow>0 ? .6 : 1) * dt;
+  a.x += direction*fighterMoveSpeed(a,guarding)*dt;
   if (pressed.has(a.keys[2])) jump(a,pressed);
   a.face = Math.sign(b.x-a.x) || a.face;
+}
+function fighterMoveSpeed(a,guarding) {
+  const base=a.kind===0 ? 280 : 222;
+  const slow=a.slow>0 ? .6 : 1;
+  if(guarding) return base*.43*slow;
+  return base*(a.moveTime>.32 ? 1 : .69)*(a.buff ? 1.52 : a.frenzy ? 1.78 : a.ascended ? 1.32 : 1)*slow;
 }
 function jump(a,pressed) {
   if (a.y === ground && !a.frozen && !a.stun && !a.guardBreak && !a.snare && !a.asleep && !a.sleepRecovery && !a.nap && !a.bedWalk && !a.charge && !pressed.has(a.keys[3])) a.vy=-520;
@@ -2164,7 +2211,8 @@ function drawPedroHD(a,tile,state,moving){
 }
 function fighter(a,pressed = keys) {
   const guard = isDefending(a,pressed);
-  const lift = 0;
+  const guardStep=guard && phase==='fight' && pressed.has(a.keys[0])!==pressed.has(a.keys[1])
+    ? Math.abs(Math.sin((last || 0)*.015))*2 : 0;
   if(a.deaf>0)text('SURDEZ '+a.deaf.toFixed(1)+'s',a.x,a.y-175,13,'#edb1ff');
   if(a.kind===0 && phase==='fight')text(pedroIsCrying(a) ? 'CHORANDO · DANO −30%' : pedroPower(a,fighters[1-a.i])>1 ? 'CAMPEÃO DA ROÇA +30%' : '',a.x,a.y-213,12,pedroIsCrying(a) ? '#80dbff' : '#ffdc78');
   oval(a.x,ground+8,44,9,'#160c20');
@@ -2173,7 +2221,7 @@ function fighter(a,pressed = keys) {
   const state = a.hp === 0 ? 'fall'
     : a.nap ? 'sleep'
     : a.asleep ? 'fall'
-    : a.sleepRecovery ? (a.sleepRecovery>.12 ? 'rise' : a.kind===9 && a.ascended ? 'guard' : 'idle')
+    : a.sleepRecovery ? (a.sleepRecovery>.12 ? 'rise' : 'idle')
     : a.bedWalk ? 'walk'
     : a.kind===8 && effects.some(effect=>effect.kind==='blanket' && effect.owner===a.i && effect.time>=.34 && effect.time<.64) ? 'punch'
     : a.tumble > .22 ? 'fall'
@@ -2202,8 +2250,7 @@ function fighter(a,pressed = keys) {
     : a.action ? (a.label === 'CHUTE' ? 'kick' : 'punch')
     : a.y < ground ? (a.kind===0 || a.kind===1 || a.kind >= 2 ? 'jump' : 'kick')
     : a.frenzy ? 'run'
-    : moving ? (a.buff || a.moveTime > .32 ? 'run' : 'walk')
-    : a.kind===9 && a.ascended ? 'guard' : 'idle';
+    : moving ? (a.buff || a.moveTime > .32 ? 'run' : 'walk') : 'idle';
   if (a.kind===11 && a.charge) {
     const colors=['#ff668e','#ffc160','#fff478','#62ec8a','#7ecbff','#be91ff'];
     colors.forEach((color,i)=>{
@@ -2233,7 +2280,8 @@ function fighter(a,pressed = keys) {
   let armedFrames;
   if(weaponStrike) armedFrames=[a.action>.14 ? weaponPose.strike : weaponPose.ready];
   else if(weaponPose && (state==='walk' || state==='run')) armedFrames=weaponPose.walk;
-  else if(weaponPose && ['idle','guard','jump'].includes(state)) armedFrames=[weaponPose.ready];
+  else if(weaponPose && state==='guard') armedFrames=[readyImage(weaponPose.guard) ? weaponPose.guard : weaponPose.ready];
+  else if(weaponPose && ['idle','jump'].includes(state)) armedFrames=[weaponPose.ready];
   const heldWeapon = armedFrames?.every(readyImage);
   const seatedPose = seatedOrsi && (state==='idle' || state==='guard')
     ? [orsiChair[state==='guard' ? 1 : 0]] : null;
@@ -2246,7 +2294,7 @@ function fighter(a,pressed = keys) {
   const tiles=(hasCast && cast) || (useHighResolution && highResolution) || alfredoCast ||
     (state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
   const remaining=embrace?.a===a ? .42*(1-embrace.time/.58) : a.action;
-  const duration=a.kind<=2 || a.kind>=13 ? (a.actionDuration || .42) : .42;
+  const duration=a.actionDuration || .42;
   const castElapsed = (a.actionDuration || .42)-a.action;
   const maykimJump = a.kind===2 && state==='jump';
   const maykimRise = a.kind===2 && state==='rise' && a.tumble>0;
@@ -2276,7 +2324,7 @@ function fighter(a,pressed = keys) {
     const breathing = state==='idle' ? Math.sin((last || 0)*.0035)*.003 : 0;
     const sprite = a.kind===7 && a.regen ? regenerationSprite(tile) : tile;
     ctx.save();
-    ctx.translate(a.x,a.y);
+    ctx.translate(a.x,a.y-guardStep);
     ctx.scale(a.face*scale*evolutionScale,scale*evolutionScale*(1+breathing));
     if(a.kind===10) drawGrowingHead(sprite,a,sprite.naturalWidth,512,-32);
     else ctx.drawImage(sprite,-256,-480);
@@ -2285,7 +2333,7 @@ function fighter(a,pressed = keys) {
     const scale = a.kind===0 ? (state==='charge' ? 1.10 : state==='special' ? .97 : 1.4) : a.kind===14 ? (a.baby>0 ? .67 : state==='special' ? 1 : 1.38) : a.kind===13 ? (state==='special' || state==='wallet' ? 1 : 1.38) : a.kind===12 ? 1.53 : a.kind===11 ? (state==='special' || state==='dash' ? 1.10 : 1.53) : a.kind===9 ? (state==='special' || state==='cheese' ? 1.03 : a.ascended ? 1.69 : 1.52) : a.kind===8 ? (state==='sleep' ? .78 : state==='special' ? 1.13 : 1.45) : a.kind===7 ? (state==='special' || state==='pill' ? 1.05 : 1.53)*(1+evolution(a)*.07) : a.kind===3 ? (state==='transform' || state==='dash' ? .97 : state==='special' ? .9 : 1.51)
       : a.kind === 5 ? (state==='special' || state==='teleport' ? .98 : 1.34) : a.kind===6 ? (state==='special' || state==='call' ? 1.02 : 1.35) : a.kind === 2 || a.kind === 4 ? 1.33 : tile.naturalHeight > 110 ? 1.08 : 1.57;
     ctx.save();
-    ctx.translate(a.x,a.y-lift);
+    ctx.translate(a.x,a.y-guardStep);
     ctx.scale(a.face,1);
     if (a.kind===3 && state==='special') {
       const base=sprites[3].idle[0];
@@ -2336,9 +2384,18 @@ function fighter(a,pressed = keys) {
     }
   }
   if (a.kind===10 && a.hp && a.printedTier>=0 && !heldWeapon && !hasCast) drawPrintedItem(a);
+  if(guard){
+    ctx.save();
+    ctx.strokeStyle=a.blockFlash ? '#d8fbff' : '#81bfff9c';
+    ctx.lineWidth=a.blockFlash ? 4 : 2;
+    ctx.beginPath();ctx.ellipse(a.x+a.face*22,a.y-91,31,54,0,a.face>0 ? -1.12 : 2.02,a.face>0 ? 1.12 : 4.26);ctx.stroke();
+    ctx.restore();
+  }
   if (a.kind===10 && a.hp && (a.migraineTicks || a.migrainePulse)) drawMigraine(a);
   if (a.hp && (a.asleep || a.nap)) {
-    if (a.blanket && sleepBlanket.complete && sleepBlanket.naturalWidth) {
+    if(a.blanket && readyImage(sleepBlanketHD)){
+      ctx.drawImage(sleepBlanketHD,a.x-76,a.y-61,152,62);
+    } else if (a.blanket && sleepBlanket.complete && sleepBlanket.naturalWidth) {
       ctx.drawImage(sleepBlanket,0,0,sleepBlanket.naturalWidth*.78,sleepBlanket.naturalHeight,
         a.x-68,a.y-48,114,47);
     }
@@ -2361,7 +2418,7 @@ function fighter(a,pressed = keys) {
     }
   }
   if (a.snare && a.hp) {
-    drawGuineaFowl(a.x,a.y,a.face,1-a.snare);
+    drawGuineaFowl(a.x,a.y,a.face,1-a.snare,true);
     text('PRESO',a.x,a.y-185,15,'#e8b5ff');
   }
   if(a.blockFlash>0){
@@ -2372,7 +2429,7 @@ function fighter(a,pressed = keys) {
   if(a.guardNotice>0)text('DEFESA QUEBRADA!',a.x,a.y-172,16,'#ff9a82');
   if (a.infectionTicks && a.hp) text('INFECTADO',a.x,a.y-184,13,'#d6f77c');
   if (a.buff) text('🥤',a.x+a.face*39,a.y-112,27);
-  const headY = a.y-lift-135+(guard ? 10 : 0);
+  const headY = a.y-guardStep-135+(guard ? 10 : 0);
   if(a.kind===14 && a.baby>0) text('DÊDÊWZINHU '+a.baby.toFixed(1)+'s',a.x,a.y-145,14,'#ffc477');
   if(a.coffeeBurn>0){
     text('QUEIMADURA',a.x,a.y-178,13,'#ffae59');
@@ -2566,7 +2623,7 @@ function applyOnlineKey(player,code,down) {
   if (index===2 && !embrace) jump(fighters[player],keys);
   if (index<2 && !embrace) {
     const fighter=fighters[player];
-    if (!fighter.stun && !fighter.snare && !fighter.asleep && !fighter.sleepRecovery && !fighter.nap && !fighter.bedWalk && !fighter.charge && !isDefending(fighter)) {
+    if (!fighter.stun && !fighter.snare && !fighter.asleep && !fighter.sleepRecovery && !fighter.nap && !fighter.bedWalk && !fighter.charge) {
       moveFighter(fighter,fighters[1-player],keys,.016);
       fighter.x=Math.max(55,Math.min(905,fighter.x));
     }
@@ -2641,13 +2698,14 @@ function predictAttack(a,slot,sequence) {
   if(a.kind===0 && slot===2){a.label='FOOOON!';a.action=.65;}
   if (a.kind===1 && slot===1) a.label='ABRAÇO DOWN';
   if (a.kind===1 && slot===2){a.label='GORFINHO DE MORANGO';a.action=.72;}
-  a.action=.42;
-  if((a.kind===13 || a.kind===14) && (slot===1 || slot===2)) a.action=.62;
+  a.action=defaultActionDuration(a.kind,slot);
+  if(a.kind===13 && (slot===1 || slot===2)) a.action=slot===1?.82:.84;
+  if(a.kind===14 && slot===1) a.action=.82;
   if(a.kind===14 && slot===2){a.baby=3;a.action=.28;}
   if(a.kind===14 && a.baby>0 && (slot===0 || slot===3)) a.action=.28;
-  if(a.kind===0 && slot===2)a.action=.65;
-  if(a.kind===1 && slot===2)a.action=.72;
-  if(a.kind===2 && (slot===1 || slot===2))a.action=slot===1?.65:.72;
+  if(a.kind===0 && slot===2)a.action=.82;
+  if(a.kind===1 && slot===2)a.action=.88;
+  if(a.kind===2 && (slot===1 || slot===2))a.action=slot===1?.65:.90;
   a.actionDuration=a.action;
   a.cool[slot]=cooldownFor(a,slot);
   a.recovery=a.kind===14 && a.baby>0 && (slot===0 || slot===3) ? (slot===0 ? .34 : .50) : slot===0 ? .68 : slot===3 ? .82 : .70;
@@ -2766,7 +2824,7 @@ function advanceGuestVisual(dt) {
     const step=dash && !dash.confirmed && chargeDistance(visual,dt)>0
       ? Math.min(dt,Math.max(0,112-(visual.x-dash.origin)*dash.face)/800) : dt;
     advanceCharge(visual,step);
-  } else if (!dash && !isDefending(visual,pressed)) moveFighter(visual,fighters[0],pressed,dt);
+  } else if (!dash) moveFighter(visual,fighters[0],pressed,dt);
   applyMomentum(visual,dt);
   if (dash) {
     const toEndpoint=(dash.endpoint-visual.x)*dash.face;
@@ -2776,10 +2834,11 @@ function advanceGuestVisual(dt) {
     }
     return visual;
   }
-  if (!online.pendingInputs.length && !isDefending(visual,pressed)) {
-    const direction=visual.frenzy ? (Math.abs(fighters[0].x-visual.x)>82 ? Math.sign(fighters[0].x-visual.x) : 0) : Number(pressed.has(visual.keys[1]))-Number(pressed.has(visual.keys[0]));
+  if (!online.pendingInputs.length) {
+    const guarding=isDefending(visual,pressed);
+    const direction=visual.frenzy && !guarding ? (Math.abs(fighters[0].x-visual.x)>82 ? Math.sign(fighters[0].x-visual.x) : 0) : Number(pressed.has(visual.keys[1]))-Number(pressed.has(visual.keys[0]));
     const lead=online.lead ?? .06;
-    const speed=(visual.kind===0 ? 280 : 222)*(visual.moveTime>.32 ? 1 : .69)*(visual.buff ? 1.52 : visual.frenzy ? 1.78 : visual.ascended ? 1.32 : 1)*(visual.slow>0 ? .6 : 1);
+    const speed=fighterMoveSpeed(visual,guarding);
     const projectedX=confirmed.x+(visual.charge ? visual.face*800 : direction*speed)*lead;
     visual.x=Math.max(55,Math.min(905,visual.x+(projectedX-visual.x)*Math.min(1,dt*9)));
     if (!pressed.has(visual.keys[2]) && confirmed.y!==ground) {
