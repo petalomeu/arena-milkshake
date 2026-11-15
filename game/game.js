@@ -93,6 +93,33 @@ const maykimBikePedro=maykimHD('bike-pedro');
 const maykimTrucks=[maykimHD('truck'),maykimHD('truck-tip')];
 function maykimBikeFor(a,b){return b.kind===0 ? sprites[2].dash[0] : maykimBikePedro;}
 const rosterHD = new Map();
+const orsiPose = name => loadFrame('9-hd-' + name);
+const orsiChair = [orsiPose('chair'), orsiPose('chair-forward')];
+const orsiCast = {
+  seated: [[orsiChair[1], orsiPose('chair-physio')], [orsiPose('chair-cheese-bite'), orsiPose('chair-cheese-vomit')]],
+  standing: [[orsiPose('cast-physio'), orsiPose('cast-physio')], [orsiPose('cheese-bite'), orsiPose('cheese-vomit')]]
+};
+const specialHD = new Map();
+function loadSpecialHD(kind) {
+  if (kind < 4 || kind === 9) return;
+  if (!specialHD.has(kind)) {
+    specialHD.set(kind, [1,2].map(slot => ['a','b'].map(phase => loadFrame(kind+'-hd-cast-'+slot+phase))));
+  }
+  return specialHD.get(kind);
+}
+const maykimTruckCast = ['a','b'].map(phase=>maykimHD('cast-2'+phase));
+const downHDCast = [1,2].map(slot=>['a','b'].map(phase=>downHD('cast-'+slot+phase)));
+const printedWeaponPoses = [0,1,2].map(tier=>{
+  const pose = state=>loadFrame('10-hd-weapon-'+tier+'-'+state);
+  return {ready:pose('ready'),strike:pose('strike'),walk:[pose('walk-0'),pose('walk-1')]};
+});
+const gabrielSleep = [0,1].map(frame=>loadFrame('8-hd-sleep-'+frame));
+const gabrielProjection = [0,1].map(frame=>loadFrame('8-hd-projection-'+frame));
+const dedewBabyHD = Object.fromEntries(['idle','walk-0','walk-1','run','jump','guard','punch','kick']
+  .map(state=>[state,loadFrame('14-hd-baby-'+state)]));
+function readyImage(image) {
+  return image?.complete && image.naturalWidth;
+}
 function loadRosterHD(kind) {
   if (kind < 4 || kind >= sprites.length) return;
   if (rosterHD.has(kind)) return rosterHD.get(kind);
@@ -103,7 +130,7 @@ function loadRosterHD(kind) {
   const kick = pose('kick');
   const poses = {
     idle: [idle],
-    walk: [0,1,2,3].map(index => pose('walk-' + index)),
+    walk: [0,1,2,3].map(index => pose((kind===9 ? 'stride-' : 'walk-') + index)),
     run: [0,1,2,3].map(index => pose('run-' + index)),
     punch: [guard, punch, punch, idle],
     kick: [guard, kick, kick, idle],
@@ -123,7 +150,8 @@ const chocolate = loadFrame('4-chocolate-0');
 const printedItemSprites = [0,1,2].map(i=>loadFrame('10-item-'+i));
 const guineaFowl = [0,1].map(i=>loadFrame('6-bird-'+i));
 const sleepBlanket=loadFrame('8-blanket-0');
-const physio=[0,1].map(i=>loadFrame('9-physio-'+i));
+const physio=[orsiPose('physio-ready'),orsiPose('physio-release')];
+const legacyPhysio=[0,1].map(i=>loadFrame('9-physio-'+i));
 const tabletShip=loadFrame('12-ship-0');
 const alfredo=sprites[12];
 const alfredoCastFrames={
@@ -252,6 +280,7 @@ function reset(playing) {
   resetCPU();
   fighters = picks.map((kind,i) => ({
     ...characters[kind], keys:roster[i].keys,i,kind,x:i ? 720 : 240,y:ground,
+    orsiStood:false,
     slow:0,frozen:0,affection:0,deaf:0,feminineAbility:0,vy:0,vx:0,face:i ? -1 : 1,hp:100,stun:0,buff:0,charge:0,dazzle:0,tumble:0,infectionTicks:0,infectionClock:0,warp:0,snare:0,frenzy:0,regen:0,blood:0,bloodX:0,bloodY:0,asleep:0,sleepRecovery:0,nap:0,bedWalk:0,blanket:false,cloneX:0,cloneAction:0,ascended:false,migraineLevel:0,migraineTicks:0,migraineClock:0,migrainePulse:0,printedTier:-1,joyClock:0,tech:0,growthRead:0,growthPercent:0,baby:0,coffeeBurn:0,coffeeClock:0,
     guardEnergy:100,guardBreak:0,guardDelay:0,guardNotice:0,guardNeedsRelease:false,blockFlash:0,recovery:0,flash:0,action:0,actionDuration:.42,moveTime:0,cool:[0,0,0,0],specialsInProgress:[null,null,null],label:''
   }));
@@ -444,6 +473,7 @@ function attack(a,b,slot) {
     return;
   }
   if (embrace || a.frozen || a.stun || a.snare || a.charge || a.action > .12 || a.recovery>0 || (a.cool[slot] || a.specialsInProgress[slot]) || keys.has(a.keys[3])) return;
+  if (a.kind===9 && (slot===0 || slot===3)) a.orsiStood=true;
   a.face = Math.sign(b.x-a.x) || a.face;
   a.cool[slot] = cooldownFor(a,slot);
   a.recovery=a.kind===14 && a.baby>0 && (slot===0 || slot===3) ? (slot===0 ? .34 : .50) : slot===0 ? .68 : slot===3 ? .82 : .70;
@@ -702,7 +732,10 @@ function confirmFighter(player) {
 }
 function paintConfirmation(player) {
   const panel = cardGroups[player].parentElement;
-  if (locked[player]) loadRosterHD(picks[player]);
+  if (locked[player]) {
+    loadRosterHD(picks[player]);
+    loadSpecialHD(picks[player]);
+  }
   panel.querySelector('.confirm').textContent = locked[player] ? 'Alterar escolha' : cpu.active && player===1 ? 'Confirmar oponente' : 'Confirmar campeão';
   [...cardGroups[player].children].forEach(card => {card.disabled=locked[player]});
   if (locked.every(Boolean)) {
@@ -1555,11 +1588,11 @@ function drawTechEffect(effect) {
   return true;
 }
 function drawLucreciFire(effect) {
-  const spread=Math.min(1,Math.max(0,(effect.time-.16)/.30));
+  const spread=Math.min(1,Math.max(0,(effect.time-.18)/.30));
   if (spread<=0) return;
   const reach=72+spread*190;
   ctx.save();
-  ctx.translate(effect.x+effect.face*31,effect.y-101);
+  ctx.translate(effect.x+effect.face*18,effect.y-163);
   ctx.scale(effect.face,1);
   ctx.globalAlpha=Math.min(1,(effect.time-.16)*6,(.82-effect.time)*3.4);
   const outer=ctx.createLinearGradient(20,0,reach,0);
@@ -1585,15 +1618,19 @@ function drawLucreciFire(effect) {
 }
 
 function drawLucreciMoney(effect) {
-  const age=Math.max(0,effect.time-.18);
   if (effect.time<.18) return;
-  for(let i=0;i<8;i++){
-    const travel=age*(590+i*44)+i*11;
+  for(let i=0;i<18;i++){
+    const age=effect.time-.18-i*.015;
+    if(age<0)continue;
+    const travel=age*(520+i*21);
     const x=effect.x+effect.face*(52+travel);
-    const y=effect.y-91+Math.sin(age*13+i*1.8)*23-(i%3)*11;
-    ctx.save();ctx.translate(x,y);ctx.scale(effect.face,1);ctx.rotate(Math.sin(age*10+i)*.35);
+    const y=effect.y-144+Math.sin(age*13+i*1.8)*Math.min(27,age*150)-(i%4)*age*28+age*age*80;
+    ctx.save();ctx.translate(x,y);ctx.scale(effect.face,1);
+    ctx.rotate((i%2 ? 1 : -1)*age*(3+i*.25));
+    ctx.globalAlpha=Math.min(1,(1.02-effect.time)*4);
     ctx.fillStyle=i%2?'#78d786':'#b8e98a';ctx.strokeStyle='#f0edba';ctx.lineWidth=1.5;
     ctx.fillRect(-12,-7,24,14);ctx.strokeRect(-12,-7,24,14);
+    ctx.strokeStyle='#3b9861';ctx.strokeRect(-9,-4,18,8);
     ctx.fillStyle='#2c9166';ctx.font='700 8px Barlow, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('R$',0,0);
     ctx.restore();
   }
@@ -1650,12 +1687,29 @@ function drawEffects() {
     if(effect.kind==='money-truck'){drawMoneyTruck(effect);continue;}
     if(effect.kind==='down-hearts'){drawDownHearts(effect.x,effect.y,effect.time);continue;}
     if(effect.kind==='strawberry-spit'){
-      if(effect.time>=.25 && !effect.hit){const distance=43+(effect.time-.25)*640,x=effect.x+effect.face*distance,tail=effect.x+effect.face*Math.max(43,distance-40);ctx.save();ctx.strokeStyle='#ff71b7';ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(tail,effect.y-134);ctx.quadraticCurveTo((tail+x)/2,effect.y-140,x,effect.y-134);ctx.stroke();for(let i=0;i<4;i++)oval(effect.x+effect.face*Math.max(43,distance-i*12),effect.y-134+Math.sin(effect.time*30+i)*4,3,2,'#ffd2e8');ctx.restore();}continue;
+      const mouth = readyImage(downHDCast[1][1]) ? 69 : 43;
+      const distance = 43+(effect.time-.25)*640;
+      if (effect.time>=.25 && distance>=mouth && !effect.hit) {
+        const x=effect.x+effect.face*distance;
+        const tail=effect.x+effect.face*Math.max(mouth,distance-40);
+        ctx.save();
+        ctx.strokeStyle='#ff71b7';ctx.lineWidth=8;ctx.lineCap='round';
+        ctx.shadowColor='#fc59af';ctx.shadowBlur=8;
+        ctx.beginPath();ctx.moveTo(tail,effect.y-134);
+        ctx.quadraticCurveTo((tail+x)/2,effect.y-140,x,effect.y-134);ctx.stroke();
+        for(let i=0;i<4;i++)oval(effect.x+effect.face*Math.max(mouth,distance-i*12),effect.y-134+Math.sin(effect.time*30+i)*4,3,2,'#ffd2e8');
+        ctx.restore();
+      }
+      continue;
     }
     if(effect.kind==='foon-wave'){
       ctx.save();ctx.translate(effect.x+effect.face*(35+effect.time*600),effect.y-75);ctx.scale(effect.face,1);
-      ctx.strokeStyle='#e693ff';ctx.lineWidth=4;ctx.globalAlpha=1-effect.time/.7;
-      for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(-i*19,0,30+effect.time*45,-1.1,1.1);ctx.stroke();}ctx.restore();continue;
+      ctx.lineCap='round';ctx.shadowColor='#b048ff';ctx.shadowBlur=15;ctx.globalAlpha=1-effect.time/.7;
+      for(let i=0;i<4;i++){
+        ctx.strokeStyle=i===0 ? '#fff2ff' : '#e693ff';ctx.lineWidth=5-i;
+        ctx.beginPath();ctx.ellipse(-i*18,0,18+effect.time*18,31+effect.time*45,-.04,-1.48,1.48);ctx.stroke();
+      }
+      ctx.restore();continue;
     }
     if(effect.kind==='dedew-coffee'){drawDedewCoffee(effect);continue;}
     if(effect.kind==='dedew-quake'){drawDedewQuake(effect);continue;}
@@ -1668,7 +1722,12 @@ function drawEffects() {
     }
     if (effect.kind==='print') { drawPrinter(effect); continue; }
     if (effect.kind==='printed-shot') {
-      if (!effect.hit) oval(effectPosition(effect),effect.y-86,12,3,'#ffe08d');
+      if (!effect.hit) {
+        const x=effectPosition(effect), y=effect.y-155;
+        oval(x-effect.face*12,y,20,2,'#ab90ffa8');
+        oval(x,y,9,3,'#ffe08d');
+        oval(x+effect.face*3,y-1,5,1,'#fff3c1');
+      }
       continue;
     }
     if (effect.kind==='physio') {
@@ -1678,10 +1737,11 @@ function drawEffects() {
         ctx.save();ctx.translate(effect.x+effect.face*(24+t*48),effect.y-78+t*73);
         ctx.rotate(t*2*effect.face);rect(-18,-7,36,14,'#ec3348');ctx.restore();
       } else {
-        drawEffectSprite(physio[effect.time<.43 ? 0 : 1],x,ground,185,effect.face);
+        const pose=effect.time<.43 ? 0 : 1;
+        drawEffectSprite(readyImage(physio[pose]) ? physio[pose] : legacyPhysio[pose],x,ground+8,215,effect.face);
         if (!effect.hit && effect.time>=.43) {
-          oval(effectPosition(effect),ground-83,13,4,'#ffe06a');
-          oval(effectPosition(effect)-effect.face*13,ground-83,6,2,'#ffab47');
+          oval(effectPosition(effect),ground-83,13,4,'#ff5461');
+          oval(effectPosition(effect)-effect.face*13,ground-84,7,2,'#ffd2bf');
         }
       }
       continue;
@@ -1689,14 +1749,23 @@ function drawEffects() {
     if (effect.kind==='cheese') {
       const x=effectPosition(effect);
       if (effect.time>=.24 && effect.time<.42) {
-        for (let i=0;i<9;i++) {
-          const f=(i+1)/10;
-          oval(effect.x+(x-effect.x)*f,effect.y-113+f*f*107-Math.sin(f*5)*22,8+i,5+i/2,'#f8bd36');
+        const progress=Math.min(1,(effect.time-.24)/.16);
+        const origin=effect.x+effect.face*35;
+        for (let i=0;i<14;i++) {
+          const f=(i/13)*progress;
+          const dropX=origin+(x-origin)*f;
+          const dropY=effect.y-126+f*f*126+Math.sin(i*2.4+effect.time*30)*4;
+          oval(dropX,dropY,7+i*.25,4+i*.19,i%3===0 ? '#ae943c' : '#c8b053');
+          if(i%2===0)oval(dropX-1,dropY-2,3,2,'#f4d884');
         }
       } else if (effect.time>=.42) {
-        oval(x,ground+4,69,10,'#bc6828');
-        oval(x,ground+1,64,8,'#f8bc39');
-        oval(x-13,ground-1,31,3,'#ffe18a');
+        ctx.save();
+        ctx.globalAlpha=Math.min(1,(3.4-effect.time)*2);
+        oval(x,ground+5,69,11,'#877334');
+        oval(x,ground+2,63,8,'#b8a04b');
+        oval(x-11,ground-1,33,3,'#daca76');
+        for(let i=0;i<8;i++)oval(x-52+i*15,ground+Math.sin(i*2.4)*4,3+i%3,2,i%2 ? '#efd580' : '#9d8944');
+        ctx.restore();
       }
       continue;
     }
@@ -1797,6 +1866,7 @@ function moveFighter(a,b,pressed,dt) {
   const direction = a.frenzy ? (Math.abs(gap)>82 ? Math.sign(gap) : 0)
     : Number(pressed.has(a.keys[1]))-Number(pressed.has(a.keys[0]));
   a.moveTime = direction ? a.moveTime+dt : 0;
+  if (a.kind===9 && (direction || pressed.has(a.keys[2]))) a.orsiStood=true;
   a.x += direction * (a.kind === 0 ? 280 : 222) * (a.moveTime > .32 ? 1 : .69) * (a.buff ? 1.52 : a.frenzy ? 1.78 : a.ascended ? 1.32 : 1) * (a.slow>0 ? .6 : 1) * dt;
   if (pressed.has(a.keys[2])) jump(a,pressed);
   a.face = Math.sign(b.x-a.x) || a.face;
@@ -1982,6 +2052,20 @@ function regenerationSprite(tile) {
 }
 
 function drawBabyChampion(a,state,moving){
+  const tick = Math.floor((last || 0)/110);
+  const pose = state==='walk' ? 'walk-'+(tick%2) : state==='run' && tick%2 ? 'walk-1' : state;
+  const hd = dedewBabyHD[pose] || dedewBabyHD.idle;
+  if (readyImage(hd)) {
+    const bob = moving ? Math.abs(Math.sin(tick*.9))*3 : 0;
+    ctx.save();
+    ctx.translate(a.x,a.y-bob);
+    ctx.scale(a.face*.34,.34);
+    if (state==='fall') {ctx.translate(-55,-32);ctx.rotate(-1.3);}
+    else if (state==='hurt') ctx.rotate(-.12);
+    ctx.drawImage(hd,-256,-480);
+    ctx.restore();
+    return;
+  }
   const source=sprites[14].baby[0];
   if(!source.complete || !source.naturalWidth) return;
   const clock=(last || 0)/1000,w=source.naturalWidth,h=source.naturalHeight;
@@ -2129,17 +2213,46 @@ function fighter(a,pressed = keys) {
       ctx.stroke();
     });
   }
-  const alfredoCast=a.kind===12 && alfredoCastFrames[state];
   const transformed=a.kind===14 && a.baby>0;
-  const highResolution = !alfredoCast && !transformed && loadRosterHD(a.kind)?.[state];
-  const useHighResolution = highResolution && highResolution.every(image => image.complete && image.naturalWidth);
-  const tiles=(useHighResolution && highResolution) || alfredoCast || (state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
   const animatedAttack=['hug','spit','special','punch','kick','teleport','pill','cheese','bat','wallet'].includes(state);
+  const customCast = animatedAttack || state==='call' || state==='dash';
+  const castSlot = customCast && (a.action || a.charge || state==='hug')
+    ? specials[a.kind].findIndex(name=>name.toUpperCase() === a.label) : -1;
+  const seatedOrsi = a.kind===9 && !a.orsiStood && !a.ascended;
+  let cast;
+  if (castSlot>=0) {
+    if (a.kind===9) cast=orsiCast[seatedOrsi ? 'seated' : 'standing'][castSlot];
+    else if (a.kind===2 && castSlot===1) cast=maykimTruckCast;
+    else if (a.kind===1) cast=downHDCast[castSlot];
+    else cast=loadSpecialHD(a.kind)?.[castSlot];
+  }
+  const hasCast = cast?.every(readyImage);
+  const alfredoCast=a.kind===12 && alfredoCastFrames[state];
+  const weaponPose = a.kind===10 && a.printedTier>=0 && !hasCast && printedWeaponPoses[a.printedTier];
+  const weaponStrike = weaponPose && state==='punch' && a.label===printedItems[a.printedTier].toUpperCase();
+  let armedFrames;
+  if(weaponStrike) armedFrames=[a.action>.14 ? weaponPose.strike : weaponPose.ready];
+  else if(weaponPose && (state==='walk' || state==='run')) armedFrames=weaponPose.walk;
+  else if(weaponPose && ['idle','guard','jump'].includes(state)) armedFrames=[weaponPose.ready];
+  const heldWeapon = armedFrames?.every(readyImage);
+  const seatedPose = seatedOrsi && (state==='idle' || state==='guard')
+    ? [orsiChair[state==='guard' ? 1 : 0]] : null;
+  const sleepPose = a.kind===8 && state==='sleep' ? gabrielSleep : null;
+  const highResolution = !transformed && (
+    (a.kind>=4 && hasCast && cast) || (heldWeapon && armedFrames) ||
+    seatedPose || sleepPose || (!alfredoCast && loadRosterHD(a.kind)?.[state])
+  );
+  const useHighResolution = highResolution && highResolution.every(readyImage);
+  const tiles=(hasCast && cast) || (useHighResolution && highResolution) || alfredoCast ||
+    (state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
   const remaining=embrace?.a===a ? .42*(1-embrace.time/.58) : a.action;
   const duration=a.kind<=2 || a.kind>=13 ? (a.actionDuration || .42) : .42;
+  const castElapsed = (a.actionDuration || .42)-a.action;
   const maykimJump = a.kind===2 && state==='jump';
   const maykimRise = a.kind===2 && state==='rise' && a.tumble>0;
-  const frameIndex=maykimJump ? (a.y < ground-35 ? 1 : a.vy < 0 ? 0 : 2)
+  const frameIndex=hasCast ? Number((embrace?.a===a ? embrace.time : castElapsed) >=
+      (a.kind===9 && castSlot===1 ? .24 : a.kind===1 && castSlot===1 ? .25 : .17))
+    : maykimJump ? (a.y < ground-35 ? 1 : a.vy < 0 ? 0 : 2)
     : maykimRise ? (a.tumble > .10 ? 0 : 1)
     : alfredoCast ? alfredoCastFrame(state,a.action) : animatedAttack && a.action
     ? Math.max(0,Math.min(tiles.length-1,Math.floor((1-Math.min(duration,remaining)/duration)*tiles.length)))
@@ -2158,14 +2271,14 @@ function fighter(a,pressed = keys) {
   }else if(transformed){
     drawBabyChampion(a,state,moving);
   }else if(useHighResolution){
-    const scale = a.kind===9 && a.ascended ? .57 : .48;
+    const scale = .48;
     const evolutionScale = a.kind===7 ? 1 + evolution(a)*.07 : 1;
     const breathing = state==='idle' ? Math.sin((last || 0)*.0035)*.003 : 0;
     const sprite = a.kind===7 && a.regen ? regenerationSprite(tile) : tile;
     ctx.save();
     ctx.translate(a.x,a.y);
     ctx.scale(a.face*scale*evolutionScale,scale*evolutionScale*(1+breathing));
-    if(a.kind===10) drawGrowingHead(sprite,a,512,512,-32);
+    if(a.kind===10) drawGrowingHead(sprite,a,sprite.naturalWidth,512,-32);
     else ctx.drawImage(sprite,-256,-480);
     ctx.restore();
   }else if(tile?.complete && tile.naturalWidth){
@@ -2222,7 +2335,7 @@ function fighter(a,pressed = keys) {
       }
     }
   }
-  if (a.kind===10 && a.hp && a.printedTier>=0) drawPrintedItem(a);
+  if (a.kind===10 && a.hp && a.printedTier>=0 && !heldWeapon && !hasCast) drawPrintedItem(a);
   if (a.kind===10 && a.hp && (a.migraineTicks || a.migrainePulse)) drawMigraine(a);
   if (a.hp && (a.asleep || a.nap)) {
     if (a.blanket && sleepBlanket.complete && sleepBlanket.naturalWidth) {
@@ -2233,7 +2346,9 @@ function fighter(a,pressed = keys) {
   }
   if (a.hp && a.nap) {
     const cloneFace=Math.sign(fighters[1-a.i].x-a.cloneX)||a.face;
-    drawEffectSprite(sprites[8].clone[a.cloneAction ? 1 : 0],a.cloneX,ground,173,cloneFace);
+    const projection = gabrielProjection[a.cloneAction ? 1 : 0];
+    if (readyImage(projection)) drawEffectSprite(projection,a.cloneX,ground+9,225,cloneFace);
+    else drawEffectSprite(sprites[8].clone[a.cloneAction ? 1 : 0],a.cloneX,ground,173,cloneFace);
   }
   if (a.kind===7 && a.hp) {
     if (a.frenzy || a.regen) oval(a.x,a.y+3,48+evolution(a)*4,8,a.frenzy ? '#ff76ec80' : '#8aff8d80');
@@ -2620,6 +2735,7 @@ function reconcileGuestVisual(previous,ack=0) {
   visual.bedWalk=confirmed.bedWalk;
   visual.blanket=confirmed.blanket;
   visual.ascended=confirmed.ascended;
+  visual.orsiStood ||= confirmed.orsiStood;
   visual.printedTier=confirmed.printedTier;
   visual.migraineLevel=confirmed.migraineLevel;
   visual.migraineTicks=confirmed.migraineTicks;
