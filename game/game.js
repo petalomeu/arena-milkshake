@@ -1030,7 +1030,7 @@ function update(dt) {
       const distance=advanceCharge(a,dt);
       if(distance && (a.kind===0 || a.kind===2) &&
           (Math.ceil(beforeCharge/.055)!==Math.ceil(a.charge/.055) || !a.charge)){
-        effects.push({kind:'charge-dust',owner:a.i,x:startX-a.face*32,y:ground,face:a.face,time:0});
+        effects.push({kind:'charge-dust',owner:a.i,x:startX-a.face*112,y:ground,face:a.face,time:0});
       }
       if (a.kind===11 && a.charge===0 && a.hp) {
         const x=Math.max(55,Math.min(905,a.x));
@@ -1188,7 +1188,8 @@ function effectPosition(effect) {
   return effect.x+effect.face*(68+490*Math.max(0,effect.time-.40));
 }
 function oldTimeForFoon(effect,dt){return Math.max(0,effect.time-dt);}
-const visualEffectDuration={'victim-impact':.48,'charge-dust':.52,'tablet-pixels':.52,'toscana-crumbs':.55,'heart-burst':.48};
+const visualEffectDuration={'victim-impact':.48,'charge-dust':.83,'tablet-pixels':.82,'toscana-crumbs':.78,'heart-burst':.48};
+const rescueEnd=1.52;
 function updateEffects(dt) {
   for (const effect of effects) {
     if(visualEffectDuration[effect.kind]){effect.time+=dt;continue;}
@@ -1405,12 +1406,11 @@ function updateEffects(dt) {
     effectHit(effect,{...attacker,face:effect.face},target,rescue ? 23 : 16,rescue ? 380 : 265,.40);
     effect.hit=true;
     effect.impact=x;
-    if(rescue)effect.finishedAt=effect.time;
-    else effect.time=.92;
+    if(!rescue)effect.time=.92;
   }
   const duration={'money-truck':1.55,'strawberry-spit':.85,'down-hearts':.85,'foon-wave':.65,'dedew-coffee':.85,'dedew-quake':.46,rescue:1.15,chocolate:1.05,gas:1.30,teleport:.49,toscana:.56,'guinea-fowl':.94,blanket:2.16,pillow:.85,physio:1.03,cheese:3.4,print:.70,'printed-shot':.65,'joy-heart':.47,'tablet-ship':1.74,tablet:1,battery:1.30,'tablet-blast':.37,'lucreci-fire':.82,'lucreci-money':1.02};
   effects=effects.filter(effect=>effect.time<(visualEffectDuration[effect.kind] ??
-    (effect.kind==='rescue' && effect.finishedAt!==undefined ? Math.max(1.15,effect.finishedAt+.38) :
+    (effect.kind==='rescue' ? rescueEnd :
       effect.kind==='joy-heart' && effect.slot===1 ? .64 : duration[effect.kind])) &&
     !((effect.kind==='tablet' || effect.kind==='battery') && effect.hit));
 }
@@ -1621,7 +1621,13 @@ function drawTechEffect(effect) {
     ctx.globalAlpha=(5-i)*.13;
     const old=techPosition(effect,Math.max(0,effect.time-i*.033));
     if(tablet){
-      for(let j=0;j<3;j++)rect(old.x+(j-1)*(8+i*2),old.y-i*4,5+i%2,5+i%2,j===1 ? '#bcabff' : '#76e6ff');
+      ctx.globalAlpha=(5-i)*.20;
+      for(let j=0;j<4;j++){
+        const dx=(j-1.5)*(9+i*4)+Math.sin(j+i)*4;
+        const dy=-i*15-j*3;
+        rect(old.x+dx,old.y+dy,9-i,9-i,j%2 ? '#d6b5ff' : '#65f8ff');
+        rect(old.x+dx+1,old.y+dy+1,3,3,'#fffaff');
+      }
     }else oval(old.x,old.y,12-i,3,'#fef294');
   }
   ctx.globalAlpha=1;
@@ -1784,13 +1790,15 @@ function drawImpactParticle(form,color,size) {
     if(form==='coin')oval(-size*.15,-size*.15,size*.5,size*.34,'#fff3af');
   }
 }
-function drawEffects() {
+const foregroundEffects=new Set(['tablet','tablet-pixels','toscana-crumbs']);
+function drawEffects(layer) {
   for (const effect of effects) {
+    if(effect.kind!=='rescue' && layer && foregroundEffects.has(effect.kind)!==(layer==='front'))continue;
     if(effect.kind==='charge-dust'){
       const p=effect.time/visualEffectDuration[effect.kind];
       const dust=chargeDust[p>.24 ? 1 : 0];
-      ctx.save();ctx.globalAlpha=(1-p)*.84;
-      if(readyImage(dust))drawEffectSprite(dust,effect.x-effect.face*p*27,effect.y+12,93+p*50,effect.face);
+      ctx.save();ctx.globalAlpha=(1-p)*.90;
+      if(readyImage(dust))drawEffectSprite(dust,effect.x-effect.face*p*33,effect.y+12-p*14,139+p*60,effect.face);
       else oval(effect.x,effect.y+3,28+p*34,11+p*8,'#ffe3b5');
       ctx.restore();
       continue;
@@ -1806,7 +1814,10 @@ function drawEffects() {
         const x=effect.x+Math.cos(angle)*reach, y=effect.y+Math.sin(angle)*reach*.8+(digital || heart ? 0 : 32*p*p);
         ctx.save();ctx.translate(x,y);ctx.rotate(angle+p*3);
         const color=digital ? (i%2 ? '#64f8ff' : '#a1afff') : heart ? '#ff8ec7' : (i%2 ? '#cc7139' : '#ffe0a2');
-        drawImpactParticle(digital ? 'pixel' : heart ? 'heart' : 'crumb',color,digital ? 5+i%3 : 3+i%3);
+        if(digital || !heart)ctx.shadowColor=color;
+        ctx.shadowBlur=digital ? 7 : 0;
+        drawImpactParticle(digital ? 'pixel' : heart ? 'heart' : 'crumb',color,digital ? 7+i%3 : 5+i%3);
+        if(!heart)rect(-2,-2,3,3,digital ? '#efffff' : '#fff2c5');
         ctx.restore();
       }
       ctx.restore();
@@ -1956,6 +1967,13 @@ function drawEffects() {
         }else{
           oval(x,y,13,8,'#612834');oval(x,y-1,11,6,'#cb6543');oval(x-2,y-4,7,2,'#ffb582');
         }
+        if(i%2===0){
+          const crumble=effect.time*29+i*1.7;
+          ctx.save();ctx.translate(x-effect.face*14,y+13+Math.sin(crumble)*8);
+          ctx.rotate(crumble);
+          drawImpactParticle('crumb',i%4 ? '#e6a054' : '#ffe4a0',3+i%3);
+          ctx.restore();
+        }
       }
       continue;
     }
@@ -2002,16 +2020,22 @@ function drawEffects() {
     if (effect.kind==='rescue') {
       const approach=Math.min(1,effect.time/.36);
       const vanX=effect.x+effect.face*(-340+approach*360);
-      drawEffectSprite(powerSprite('ambulance',ambulance),vanX,ground+10,236,effect.face);
-      if (effect.time>.28) {
+      if(layer!=='front')drawEffectSprite(powerSprite('ambulance',ambulance),vanX,ground+10,236,effect.face);
+      if (layer!=='back' && effect.time>.28) {
         for(let i=1;i>=0;i--){
-          const age=Math.max(0,effect.time-.28-i*.07);
+          const age=effect.time-.28-i*.12;
+          if(age<=0)continue;
           const x=effect.x+effect.face*(20+Math.min(1,age/.12)*48+Math.max(0,age-.12)*490);
-          const pose=Math.floor(age*18)%4;
-          const medic=readyImage(rescueRun[pose]) ? rescueRun[pose] : powerSprite('medic-'+pose%2,nurses[pose%2]);
+          const pose=Math.floor(age*16)%4;
+          const medic=rescueRun[pose];
           ctx.save();
-          ctx.globalAlpha=Math.min(1,age*22);
-          drawEffectSprite(medic,x,ground-i*11,109-i*20,effect.face);
+          ctx.globalAlpha=Math.min(1,age*22,(rescueEnd-effect.time)*6);
+          if(rescueRun.every(readyImage)){
+            const scale=i ? .23 : .28;
+            ctx.translate(x,ground+9-i*11);
+            ctx.scale(effect.face*scale,scale);
+            ctx.drawImage(medic,-256,-480);
+          }else drawEffectSprite(powerSprite('medic-'+pose%2,nurses[pose%2]),x,ground+9-i*11,109-i*20,effect.face);
           ctx.restore();
         }
       }
@@ -2430,13 +2454,16 @@ function fighter(a,pressed = keys) {
   const seatedPose = seatedOrsi && (state==='idle' || state==='guard')
     ? [orsiChair[state==='guard' ? 1 : 0]] : null;
   const sleepPose = a.kind===8 && state==='sleep' ? gabrielSleep : null;
+  const modernCastFallback = !hasCast && castSlot===0 && (a.kind===5 || a.kind===6)
+    ? loadRosterHD(a.kind)?.punch : null;
   const highResolution = !transformed && (
     (a.kind>=4 && hasCast && cast) || (heldWeapon && armedFrames) ||
-    seatedPose || sleepPose || (!alfredoCast && loadRosterHD(a.kind)?.[state])
+    seatedPose || sleepPose || modernCastFallback || (!alfredoCast && loadRosterHD(a.kind)?.[state])
   );
   const useHighResolution = highResolution && highResolution.every(readyImage);
   const tiles=(hasCast && cast) || (useHighResolution && highResolution) || alfredoCast ||
-    (state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
+    (modernCastFallback ? sprites[a.kind].idle :
+      state==='special' && a.kind===10 ? sprites[10].guard : sprites[a.kind][state]) || sprites[a.kind].idle;
   const remaining=embrace?.a===a ? .42*(1-embrace.time/.58) : a.action;
   const duration=a.actionDuration || .42;
   const castElapsed = (a.actionDuration || .42)-a.action;
@@ -2686,13 +2713,14 @@ function frame(now) {
   const quake=effects.find(e=>e.kind==='dedew-quake' && e.time<.26);
   if(quake && phase==='fight') ctx.translate(Math.sin(quake.time*110)*4*(1-quake.time/.26),Math.cos(quake.time*90)*2);
   arena();
-  drawEffects();
+  drawEffects('back');
   fighter(fighters[0]);
   if (online?.role==='guest' && phase==='fight') {
     fighter(advanceGuestVisual(dt),online.localKeys);
   } else {
     fighter(fighters[1]);
   }
+  drawEffects('front');
   if (phase==='fight') drawDazzle();
   ctx.restore();
   hud();
