@@ -34,12 +34,11 @@ const clips = Object.fromEntries(Object.entries({
   calecaFlash:'cs-go-flashbang.mp3', pupinhoWarp:'fala-baixo-nengue.mp3', pupinhoGas:'fartmeme.mp3',
   fabioToscana:'beto-carreiro-sem-titulo.mp3', fabioGalinhas:'gluglucordia.mp3',
   matheusPrinter:'matheus-machine.mp3', matheusItem:'matheus-item.mp3',
-  matheusHeartbeat:'matheus-coracao.mp3', matheusBleeding:'matheus-sangrando.mp3',
-  crowd:'torcida-arena.wav'
+  matheusHeartbeat:'matheus-coracao.mp3', matheusBleeding:'matheus-sangrando.mp3'
 }).map(([name,file]) => {
   const clip = new Audio(file);
   clip.preload = 'auto';
-  clip.volume = name === 'crowd' ? .34 : name === 'hurt' ? .55 : .8;
+  clip.volume = name === 'hurt' ? .55 : .8;
   return [name,clip];
 }));
 const audioStart = {horn:1, milk:1.5};
@@ -294,9 +293,6 @@ clips.pedroDeath.addEventListener('error',finishPedroLine);
 
 function reset(playing) {
   for(const clip of Object.values(clips)) clip.muted=false;
-  clips.crowd.pause();
-  crowdPhase='';
-  crowdAt=-Infinity;
   if(pedroAudioBus)pedroAudioBus.gain.value=1;
   stopMatheusAudio();
   resetCPU();
@@ -821,7 +817,6 @@ stageCards.forEach((card,i)=>{card.onclick=()=>{
 }});
 function showCharacters() {
   stopMatheusAudio();
-  clips.crowd.pause();
   cancelReactionAudio();
   document.body.classList.remove('fighting');
   phase='characters';
@@ -2141,10 +2136,12 @@ const paintedStands={
   adelia:[[0,157,236,89],[725,157,235,89]]
 };
 const paintedDetails={
-  ure:[[306,40,350,152]],
-  fazenda:[[293,233,60,31],[428,229,69,35],[534,237,72,29]],
-  grafica:[[54,113,193,128],[712,113,192,128]],
-  cofre:[[397,249,169,76]]
+  milkshake:[[153,58,112,85],[691,58,110,85]],
+  ure:[[315,63,330,128],[123,53,115,144],[729,53,112,144]],
+  fazenda:[[293,233,60,31],[428,229,69,35],[534,237,72,29],[55,62,42,79],[862,62,48,79]],
+  grafica:[[59,96,168,146],[736,96,169,146]],
+  cofre:[[397,249,169,76],[129,69,48,79],[792,69,54,79]],
+  adelia:[[24,235,200,57],[739,235,196,57]]
 };
 function stageReaction(id) {
   if(id==='fazenda')return fighters.some(a=>a.kind===0 && a.charge>0);
@@ -2152,19 +2149,30 @@ function stageReaction(id) {
     (a.label==='OVO IMPRIMIR EM' || a.label==='SUPERENXAQUECA')) || effects.some(e=>e.kind==='print');
   return id==='cofre' && effects.some(e=>e.kind==='money-truck');
 }
-function movePaintedBand(image,[x,y,w,h],clock,amplitude,frequency) {
+function movePaintedBand(image,[x,y,w,h],clock,amplitude,horizontal=false) {
   const sx=image.naturalWidth/960,sy=image.naturalHeight/500;
-  const columns=Math.ceil(w/16);
-  const width=w/columns;
-  const split=h*.49;
-  for(let column=0;column<columns;column++){
-    const pos=x+column*width;
-    const center=(column+.5)/columns;
-    const motion=Math.sin(clock*frequency+center*11)*Math.sin(center*Math.PI)*amplitude;
-    const stripWidth=Math.min(x+w-pos,width+.16);
-    ctx.drawImage(image,pos*sx,y*sy,stripWidth*sx,split*sy,pos,y,stripWidth,split+motion);
-    ctx.drawImage(image,pos*sx,(y+split)*sy,stripWidth*sx,(h-split)*sy,
-      pos,y+split+motion,stripWidth,h-split-motion);
+  const length=horizontal ? h : w;
+  const depth=horizontal ? w : h;
+  const count=Math.ceil(length/(horizontal ? 5 : 10));
+  const edge=length/count;
+  const joint=depth*.51;
+  for(let i=0;i<count;i++){
+    const center=(i+.5)/count;
+    const motion=Math.sin(clock+center*(horizontal ? 2.6 : 13))*
+      Math.sin(center*Math.PI)*amplitude;
+    const offset=i*edge;
+    const slice=Math.min(length-offset,edge+.18);
+    if(horizontal){
+      const row=y+offset;
+      ctx.drawImage(image,x*sx,row*sy,joint*sx,slice*sy,x,row,joint+motion,slice);
+      ctx.drawImage(image,(x+joint)*sx,row*sy,(w-joint)*sx,slice*sy,
+        x+joint+motion,row,w-joint-motion,slice);
+    }else{
+      const col=x+offset;
+      ctx.drawImage(image,col*sx,y*sy,slice*sx,joint*sy,col,y,slice,joint+motion);
+      ctx.drawImage(image,col*sx,(y+joint)*sy,slice*sx,(h-joint)*sy,
+        col,y+joint+motion,slice,h-joint-motion);
+    }
   }
 }
 function arena() {
@@ -2173,17 +2181,19 @@ function arena() {
   const image=adelia ? schoolArena : stages[stageIndex];
   if(readyImage(image)){
     ctx.drawImage(image,0,0,960,500);
-    if(!reduceMotion.matches){
-      const clock=(last || 0)/1000;
-      const reaction=stageReaction(id);
-      const cheering=phase==='end' || effects.some(e=>e.kind==='victim-impact');
-      paintedStands[id].forEach((band,index)=>{
-        movePaintedBand(image,band,clock+index*.31,cheering ? 4.7 : 2.4,cheering ? 7.4 : 4.8);
-      });
-      paintedDetails[id]?.forEach((band,index)=>{
-        movePaintedBand(image,band,clock+index*.37,reaction ? 4.6 : 1.5,reaction ? 8 : 3.1);
-      });
-    }
+    const clock=(last || 0)/1000;
+    const reaction=stageReaction(id);
+    const cheering=phase==='end' || effects.some(e=>e.kind==='victim-impact');
+    const strength=reduceMotion.matches ? .42 : 1;
+    paintedStands[id].forEach((band,index)=>{
+      movePaintedBand(image,band,clock*(cheering ? 5.4 : 3.7)+index*1.3,(cheering ? 16 : 11)*strength);
+    });
+    paintedDetails[id]?.forEach((band,index)=>{
+      // The cattle move within individual crops; the fence and ground are outside them.
+      const bull=id==='fazenda' && index<3;
+      const amplitude=bull ? (reaction ? 11 : 7.5) : (reaction ? 12 : 6);
+      movePaintedBand(image,band,clock*(bull ? 3.4 : 2.8)+index*1.5,amplitude*strength,true);
+    });
   }else{
     rect(0,0,960,500,'#261b38');
     rect(0,ground,960,500-ground,'#493047');
@@ -2654,18 +2664,6 @@ function resizeCombatCanvas(){
   if(canvas.width!==width || canvas.height!==height){canvas.width=width;canvas.height=height;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';}
   ctx.setTransform(width/960,0,0,height/500,0,0);
 }
-let crowdPhase='',crowdAt=-Infinity;
-function updateCrowdAudio(now) {
-  if(online?.role==='guest')return;
-  const opening=phase==='fight' && crowdPhase==='countdown';
-  const ending=phase==='end' && crowdPhase==='fight';
-  const impact=phase==='fight' && effects.some(e=>e.kind==='victim-impact' && e.time<.12);
-  crowdPhase=phase;
-  if(ending || ((opening || impact) && now-crowdAt>1550)){
-    crowdAt=now;
-    playClip('crowd');
-  }
-}
 function frame(now) {
   resizeCombatCanvas();
   syncDeafnessAudio();
@@ -2674,7 +2672,6 @@ function frame(now) {
   else if (!online) update(Math.min(.033,(now-(last ?? now))/1000));
   const dt=Math.min(.033,(now-(last ?? now))/1000);
   last=now;
-  updateCrowdAudio(now);
   if (phase === 'characters' || phase === 'stages') {
     requestAnimationFrame(frame);
     return;
