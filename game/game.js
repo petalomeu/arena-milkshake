@@ -158,6 +158,9 @@ const legacyPhysio=[0,1].map(i=>loadFrame('9-physio-'+i));
 const tabletShip=loadFrame('12-ship-0');
 const powerArt=Object.fromEntries(['ambulance','medic-0','medic-1','chocolate','sausage','gas','heart','tablet-ship']
   .map(name=>[name,loadFrame('power-'+name)]));
+const rescueRun=[0,1,2,3].map(index=>loadFrame('power-medic-run-'+index));
+const chargeDust=[0,1].map(index=>loadFrame('power-charge-dust-'+index));
+const truckCoins=[loadFrame('power-coin-face'),loadFrame('power-coin-edge')];
 function powerSprite(name,fallback) {
   return readyImage(powerArt[name]) ? powerArt[name] : fallback;
 }
@@ -457,7 +460,7 @@ function specialHit(a,b,slot,damage,push,stun,grab=false,blanketHit=false) {
   return hit(a,b,damage,push,stun,grab,blanketHit,slot);
 }
 function effectHit(effect,a,b,damage,push,stun,grab=false,blanketHit=false) {
-  return specialHit(a,b,specialEffectSlots[effect.kind] ?? 0,damage,push,stun,grab,blanketHit);
+  return specialHit(a,b,effect.slot ?? specialEffectSlots[effect.kind] ?? 0,damage,push,stun,grab,blanketHit);
 }
 function defaultActionDuration(kind,slot) {
   return (slot===1 || slot===2) && kind!==3 ? .74 : .42;
@@ -475,7 +478,7 @@ function advanceSpecialCooldowns(dt) {
         ongoingSpecialStates[a.kind][slot-1].some(state=>a[state]>0) ||
         cast.targetStates.some(state=>opponent[state]>0) ||
         (slot===1 && embrace?.a===a) ||
-        effects.some(effect=>effect.owner===a.i && specialEffectSlots[effect.kind]===slot);
+        effects.some(effect=>effect.owner===a.i && (effect.slot ?? specialEffectSlots[effect.kind])===slot);
       if (!ongoing) a.specialsInProgress[slot]=null;
     }
   }
@@ -556,7 +559,7 @@ function attack(a,b,slot) {
   } else if (a.kind===11) {
     if (slot===1) {
       a.label='GOLPE DA FELICIDADE';
-      if (close && gap<300) specialHit(a,b,1,14,-260,.25);
+      effects.push({kind:'joy-heart',slot:1,owner:a.i,x:a.x,y:a.y,face:a.face,time:0,hit:false});
     } else {
       a.label='INVESTIDA DA FELICIDADE';
       beginCharge(a);
@@ -1023,7 +1026,12 @@ function update(dt) {
     }
     if(a.frozen>0){a.vx=a.vy=0;continue;}
     if (a.charge) {
+      const beforeCharge=a.charge, startX=a.x;
       const distance=advanceCharge(a,dt);
+      if(distance && (a.kind===0 || a.kind===2) &&
+          (Math.ceil(beforeCharge/.055)!==Math.ceil(a.charge/.055) || !a.charge)){
+        effects.push({kind:'charge-dust',owner:a.i,x:startX-a.face*32,y:ground,face:a.face,time:0});
+      }
       if (a.kind===11 && a.charge===0 && a.hp) {
         const x=Math.max(55,Math.min(905,a.x));
         effects.push({kind:'joy-heart',owner:a.i,x,y:a.y,face:Math.sign(b.x-x)||a.face,time:0,hit:false});
@@ -1131,6 +1139,7 @@ function updateTechEffect(effect,attacker,target,dt) {
       effect.hit=true;
     }
     if (y>=ground) effect.hit=true;
+    if(effect.hit)effects.push({kind:'tablet-pixels',owner:effect.owner,x,y:Math.min(ground,y),time:0});
     return true;
   }
   if (effect.kind!=='battery') return false;
@@ -1161,7 +1170,10 @@ function updateTechEffect(effect,attacker,target,dt) {
   return true;
 }
 function effectPosition(effect) {
-  if (effect.kind==='joy-heart') return effect.x+effect.face*(21+520*effect.time);
+  if (effect.kind==='joy-heart') {
+    const age=Math.max(0,effect.time-(effect.slot===1 ? .17 : 0));
+    return effect.x+effect.face*(27+(effect.slot===1 ? 620 : 520)*age);
+  }
   if (effect.kind==='lucreci-money') return effect.x+effect.face*(54+Math.max(0,effect.time-.18)*760);
   if (effect.kind==='printed-shot') return effect.x+effect.face*(61+effect.time*980);
   if (effect.kind==='physio') return effect.x+effect.face*(67+Math.max(0,effect.time-.43)*890);
@@ -1176,9 +1188,10 @@ function effectPosition(effect) {
   return effect.x+effect.face*(68+490*Math.max(0,effect.time-.40));
 }
 function oldTimeForFoon(effect,dt){return Math.max(0,effect.time-dt);}
+const visualEffectDuration={'victim-impact':.48,'charge-dust':.52,'tablet-pixels':.52,'toscana-crumbs':.55,'heart-burst':.48};
 function updateEffects(dt) {
   for (const effect of effects) {
-    if(effect.kind==='victim-impact'){effect.time+=dt;continue;}
+    if(visualEffectDuration[effect.kind]){effect.time+=dt;continue;}
     const old=effectPosition(effect);
     effect.time+=dt;
     if(effect.kind==='money-truck'){
@@ -1230,10 +1243,12 @@ function updateEffects(dt) {
     }
     if (effect.kind==='joy-heart') {
       const x=effectPosition(effect);
-      if (!effect.hit && target.hp && Math.abs(target.y-effect.y)<82 &&
+      const direct=effect.slot===1;
+      if (!effect.hit && (!direct || effect.time>=.17) && target.hp && Math.abs(target.y-effect.y)<82 &&
           target.x>=Math.min(old,x)-34 && target.x<=Math.max(old,x)+34) {
-        effectHit(effect,{...attacker,face:effect.face},target,19,290,.32);
+        effectHit(effect,{...attacker,face:effect.face},target,direct ? 14 : 19,direct ? -260 : 290,direct ? .25 : .32);
         effect.hit=true;
+        effects.push({kind:'heart-burst',owner:effect.owner,x:target.x,y:target.y-105,face:effect.face,time:0});
       }
       continue;
     }
@@ -1340,6 +1355,7 @@ function updateEffects(dt) {
         target.vx=target.vy=0;
         target.y=ground;
       } else {
+        effects.push({kind:'toscana-crumbs',owner:effect.owner,x:target.x,y:target.y-100,face:effect.face,time:0});
         if(!effectHit(effect,{...attacker,face:effect.face},target,21,360,.70,true))continue;
         target.charge=0;
         target.tumble=.68;
@@ -1389,10 +1405,14 @@ function updateEffects(dt) {
     effectHit(effect,{...attacker,face:effect.face},target,rescue ? 23 : 16,rescue ? 380 : 265,.40);
     effect.hit=true;
     effect.impact=x;
-    effect.time=rescue ? .99 : .92;
+    if(rescue)effect.finishedAt=effect.time;
+    else effect.time=.92;
   }
   const duration={'money-truck':1.55,'strawberry-spit':.85,'down-hearts':.85,'foon-wave':.65,'dedew-coffee':.85,'dedew-quake':.46,rescue:1.15,chocolate:1.05,gas:1.30,teleport:.49,toscana:.56,'guinea-fowl':.94,blanket:2.16,pillow:.85,physio:1.03,cheese:3.4,print:.70,'printed-shot':.65,'joy-heart':.47,'tablet-ship':1.74,tablet:1,battery:1.30,'tablet-blast':.37,'lucreci-fire':.82,'lucreci-money':1.02};
-  effects=effects.filter(effect=>effect.time<(effect.kind==='victim-impact' ? .48 : duration[effect.kind]) && !((effect.kind==='tablet' || effect.kind==='battery') && effect.hit));
+  effects=effects.filter(effect=>effect.time<(visualEffectDuration[effect.kind] ??
+    (effect.kind==='rescue' && effect.finishedAt!==undefined ? Math.max(1.15,effect.finishedAt+.38) :
+      effect.kind==='joy-heart' && effect.slot===1 ? .64 : duration[effect.kind])) &&
+    !((effect.kind==='tablet' || effect.kind==='battery') && effect.hit));
 }
 
 function drawEffectSprite(image,x,y,width,face) {
@@ -1572,7 +1592,7 @@ function drawTechEffect(effect) {
       const angle=i*Math.PI/6;
       const x=effect.x+Math.cos(angle)*radius*(1+progress*.4);
       const y=effect.y+Math.sin(angle)*radius*.76;
-      oval(x,y,4+i%3,3,i%2 ? '#ffc459' : '#72e9ff');
+      rect(x,y,5+i%3,5+i%3,i%2 ? '#ffc459' : '#72e9ff');
     }
     if (effect.combo) text('COMBO TECH!',effect.x,effect.y-50,23,'#67eaff');
     ctx.restore();
@@ -1600,7 +1620,9 @@ function drawTechEffect(effect) {
   for (let i=1;i<=4;i++) {
     ctx.globalAlpha=(5-i)*.13;
     const old=techPosition(effect,Math.max(0,effect.time-i*.033));
-    oval(old.x,old.y,12-i,3,tablet ? '#76e6ff' : '#fef294');
+    if(tablet){
+      for(let j=0;j<3;j++)rect(old.x+(j-1)*(8+i*2),old.y-i*4,5+i%2,5+i%2,j===1 ? '#bcabff' : '#76e6ff');
+    }else oval(old.x,old.y,12-i,3,'#fef294');
   }
   ctx.globalAlpha=1;
   ctx.translate(x,y);ctx.rotate(effect.time*(tablet ? 2.8 : 8));
@@ -1710,9 +1732,17 @@ function drawMoneyTruck(effect){
       if(age<0)continue;
       const fall=Math.min(1,age*2.5);
       const cx=effect.x+Math.sin(i*9.3)*(25+fall*55),cy=ground-225+fall*fall*225;
-      ctx.save();ctx.translate(cx,cy);ctx.rotate(age*10+i);
-      oval(0,0,2+Math.abs(Math.sin(age*18+i))*4,5,'#efaa36');
-      oval(0,-1,2,3,'#fff5b1');ctx.restore();
+      const spin=Math.cos(age*22+i);
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(Math.sin(age*9+i)*.65);
+      const coin=truckCoins[Math.abs(spin)<.24 ? 1 : 0];
+      if(readyImage(coin)){
+        const width=Math.abs(spin)<.24 ? 4 : 7+Math.abs(spin)*11;
+        ctx.drawImage(coin,-width/2,-11,width,22);
+      }else{
+        oval(0,0,3+Math.abs(spin)*5,10,'#efaa36');
+        oval(0,-1,2,5,'#fff5b1');
+      }
+      ctx.restore();
     }
  }
 }
@@ -1756,6 +1786,32 @@ function drawImpactParticle(form,color,size) {
 }
 function drawEffects() {
   for (const effect of effects) {
+    if(effect.kind==='charge-dust'){
+      const p=effect.time/visualEffectDuration[effect.kind];
+      const dust=chargeDust[p>.24 ? 1 : 0];
+      ctx.save();ctx.globalAlpha=(1-p)*.84;
+      if(readyImage(dust))drawEffectSprite(dust,effect.x-effect.face*p*27,effect.y+12,93+p*50,effect.face);
+      else oval(effect.x,effect.y+3,28+p*34,11+p*8,'#ffe3b5');
+      ctx.restore();
+      continue;
+    }
+    if(effect.kind==='tablet-pixels' || effect.kind==='toscana-crumbs' || effect.kind==='heart-burst'){
+      const p=effect.time/visualEffectDuration[effect.kind];
+      const digital=effect.kind==='tablet-pixels';
+      const heart=effect.kind==='heart-burst';
+      ctx.save();ctx.globalAlpha=1-p;
+      for(let i=0;i<16;i++){
+        const angle=i*2.39996;
+        const reach=(16+p*(42+i%4*13));
+        const x=effect.x+Math.cos(angle)*reach, y=effect.y+Math.sin(angle)*reach*.8+(digital || heart ? 0 : 32*p*p);
+        ctx.save();ctx.translate(x,y);ctx.rotate(angle+p*3);
+        const color=digital ? (i%2 ? '#64f8ff' : '#a1afff') : heart ? '#ff8ec7' : (i%2 ? '#cc7139' : '#ffe0a2');
+        drawImpactParticle(digital ? 'pixel' : heart ? 'heart' : 'crumb',color,digital ? 5+i%3 : 3+i%3);
+        ctx.restore();
+      }
+      ctx.restore();
+      continue;
+    }
     if(effect.kind==='victim-impact'){
       const target=fighters[effect.target];
       if(!target)continue;
@@ -1812,11 +1868,12 @@ function drawEffects() {
     if (effect.kind==='lucreci-money') { drawLucreciMoney(effect); continue; }
     if (effect.kind==='joy-heart') {
       if (!effect.hit){
-        const x=effectPosition(effect),y=effect.y-62;
+        const x=effectPosition(effect),y=effect.y-60;
+        const prep=effect.slot===1 && effect.time<.17;
         if(readyImage(powerArt.heart)){
-          for(let i=2;i>=0;i--){
+          for(let i=prep ? 0 : 2;i>=0;i--){
             ctx.save();ctx.globalAlpha=1-i*.35;
-            drawEffectSprite(powerArt.heart,x-effect.face*i*17,y+i*2,48-i*12,effect.face);
+            drawEffectSprite(powerArt.heart,x-effect.face*i*17,y+i*2,(prep ? 24+effect.time*140 : 59)-i*14,effect.face);
             ctx.restore();
           }
         }else text('♥',x,y-14,47,'#ff63b4');
@@ -1887,6 +1944,7 @@ function drawEffects() {
       continue;
     }
     if (effect.kind==='toscana') {
+      if(effect.time<.12 || effect.hit)continue;
       const end=effect.impact ?? effectPosition(effect);
       const count=Math.max(2,Math.round(Math.abs(end-effect.x)/19));
       for (let i=0;i<count;i++) {
@@ -1899,7 +1957,6 @@ function drawEffects() {
           oval(x,y,13,8,'#612834');oval(x,y-1,11,6,'#cb6543');oval(x-2,y-4,7,2,'#ffb582');
         }
       }
-      if (effect.hit) text('✦',end,effect.y-115,27,'#ffdc91');
       continue;
     }
     if (effect.kind==='guinea-fowl') {
@@ -1946,12 +2003,17 @@ function drawEffects() {
       const approach=Math.min(1,effect.time/.36);
       const vanX=effect.x+effect.face*(-340+approach*360);
       drawEffectSprite(powerSprite('ambulance',ambulance),vanX,ground+10,236,effect.face);
-      if (effect.time>.34) {
-        const x=effect.hit ? effect.impact : effectPosition(effect);
-        const pose=effect.hit ? 2 : Math.floor(effect.time*14)%2;
-        const medic=powerSprite('medic-'+pose%2,nurses[pose]);
-        drawEffectSprite(medic,x-effect.face*31,ground-14,78,effect.face);
-        drawEffectSprite(medic,x,ground,102,effect.face);
+      if (effect.time>.28) {
+        for(let i=1;i>=0;i--){
+          const age=Math.max(0,effect.time-.28-i*.07);
+          const x=effect.x+effect.face*(20+Math.min(1,age/.12)*48+Math.max(0,age-.12)*490);
+          const pose=Math.floor(age*18)%4;
+          const medic=readyImage(rescueRun[pose]) ? rescueRun[pose] : powerSprite('medic-'+pose%2,nurses[pose%2]);
+          ctx.save();
+          ctx.globalAlpha=Math.min(1,age*22);
+          drawEffectSprite(medic,x,ground-i*11,109-i*20,effect.face);
+          ctx.restore();
+        }
       }
     } else if (!effect.hit && effect.time>=.17) {
       const candy=powerSprite('chocolate',chocolate);
@@ -2298,15 +2360,6 @@ function fighter(a,pressed = keys) {
   if(a.deaf>0)text('SURDEZ '+a.deaf.toFixed(1)+'s',a.x,a.y-175,13,'#edb1ff');
   if(a.kind===0 && phase==='fight')text(pedroIsCrying(a) ? 'CHORANDO · DANO −30%' : pedroPower(a,fighters[1-a.i])>1 ? 'CAMPEÃO DA ROÇA +30%' : '',a.x,a.y-213,12,pedroIsCrying(a) ? '#80dbff' : '#ffdc78');
   oval(a.x,ground+8,44,9,'#160c20');
-  if(a.charge && (a.kind===0 || a.kind===2)){
-    ctx.save();
-    for(let i=0;i<7;i++){
-      const p=(((last || 0)*.003+i/7)%1);
-      ctx.globalAlpha=(1-p)*.55;
-      oval(a.x-a.face*(24+p*128),a.y+4-p*28,5+p*19,3+p*9,i%2 ? '#d3a66e' : '#ffe2b6');
-    }
-    ctx.restore();
-  }
   const moving = phase === 'fight' && (pressed.has(a.keys[0]) || pressed.has(a.keys[1]));
   const special = a.charge || embrace?.a === a || (a.action && ['FOOOON!','SUPER ABRAÇO','MILKSHAKE TURBO','GRANADA DE FUMAÇA','BRILHO DA CARECA','COMEDOR DE AÇÚCAR!','PEIDO INFECTANTE','TOSCANA DESENROLADA','SERINGA DA LOUCURA','DORME NENÉM','INVOCAÇÃO DA FISIOTERAPEUTA','OVO IMPRIMIR EM','SUPERENXAQUECA','GOLPE DA FELICIDADE','PODER DOS TABLETS','MOLHO DE PIMENTA','INVESTIDA DO PATACO','ESGUICHO DO CAFÉ','DÊDÊWZINHU'].includes(a.label));
   const state = a.hp === 0 ? 'fall'
@@ -2465,13 +2518,6 @@ function fighter(a,pressed = keys) {
     for(let i=0;i<level;i++){
       const t=(last ?? 0)/1000*2+i*Math.PI*2/level;
       text('✦',a.x+Math.cos(t)*72,a.y-101+Math.sin(t)*46,22,'#ffe282');
-    }
-    if (a.action && a.label==='GOLPE DA FELICIDADE') {
-      text('HA HA HA!',a.x+a.face*61,a.y-161,21,'#fff28b');
-      ctx.strokeStyle='#ffc366';ctx.lineWidth=3;
-      for(let i=0;i<3;i++){
-        ctx.beginPath();ctx.ellipse(a.x+a.face*(59+i*32),a.y-103,9+i*2,17+i*7,0,0,Math.PI*2);ctx.stroke();
-      }
     }
   }
   if (a.kind===10 && a.hp && a.printedTier>=0 && !heldWeapon && !hasCast) drawPrintedItem(a);
