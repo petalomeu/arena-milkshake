@@ -17,6 +17,8 @@ canvas{display:block;background:#080a10;border-radius:8px;width:min(100%,calc((1
 @media(max-width:420px){.selection-heading{display:block}.mode-chip{display:inline-flex;margin-top:10px}.champion-preview{grid-template-columns:105px minmax(0,1fr)}.champion-preview strong{font-size:28px}.fighter-cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .connection-bar button[aria-pressed=true]{border-color:var(--gold);background:#3a3040;color:#ffe2a9}body.vs-machine .controls section:nth-child(2) p:not(.cpu-help){display:none}.cpu-help{color:#f4cc7a}
 #guard-tip{margin:3px auto 0;color:#a2b7c8;font-size:11px;text-align:center;max-width:1200px}body.fighting main{grid-template-rows:auto minmax(0,1fr) auto auto auto}
+.combat-settings{margin:14px 0;color:#d4d7e5}.combat-settings .actions{margin-top:8px}.combat-settings select,.combat-settings input{font:inherit;color:inherit;background:#141823;border:1px solid #41465b;border-radius:6px;padding:6px 8px}.combat-settings input{width:120px}.combat-settings label{display:inline-flex;align-items:center;gap:6px}.combat-settings output{color:var(--gold)}
+#combat-pause{position:fixed;inset:0;z-index:3;display:grid;place-items:center;background:#0a0c14dc}#combat-pause>div{padding:22px;border:1px solid #41465b;border-radius:12px;background:#171925}#combat-pause h2{margin:0 0 12px}#combat-classic-controls{display:flex;gap:12px;width:100%}#combat-v2-controls{width:100%}
 /* Keep both featured champions aligned, with compact portrait and skill spacing. */
 .champion-preview{grid-template-columns:minmax(110px,29%) minmax(0,1fr);gap:16px;min-height:278px;padding:16px;align-items:center}
 .champion-preview img{height:236px;width:100%}
@@ -50,19 +52,48 @@ canvas{display:block;background:#080a10;border-radius:8px;width:min(100%,calc((1
 <button class="stage-card" type="button"><img src="stage-grafica.webp" alt=""><span>Gráfica do Matheus</span></button>
 <button class="stage-card" type="button"><img src="stage-cofre.webp" alt=""><span>Cofre do Grau</span></button>
 </div>
+<div class="combat-settings">
+  <label>Regras <select id="combat-rules"><option value="classic">Clássico</option><option value="v2">Combate 2.0</option></select></label>
+  <details>
+    <summary>Remapear teclas do Combate 2.0</summary>
+    <div class="actions">
+      <label>Perfil <select id="combat-profile"><option value="0">Principal</option><option value="1">P2 local</option></select></label>
+      <label>Ação <select id="combat-action"></select></label>
+      <label>Nova tecla <input id="combat-binding" readonly placeholder="Pressione aqui"></label>
+      <button type="button" class="secondary" id="combat-reset-bindings">Restaurar teclas</button>
+      <output id="combat-binding-status" aria-live="polite"></output>
+    </div>
+  </details>
+  <details>
+    <summary>Áudio</summary>
+    <div class="actions">
+      <label>Mixagem <select id="combat-audio-mix"><option value="recorded">Gravações</option><option value="classic">Anterior</option></select></label>
+      <label>Ambiente <input type="range" id="combat-ambient-volume" min="0" max="100" value="30"></label>
+      <label>Vozes <input type="range" id="combat-voice-volume" min="0" max="100" value="62"></label>
+      <button class="secondary" type="button" id="combat-audio-demo">Ouvir os impactos</button>
+    </div>
+  </details>
+</div>
 <div class="actions"><button id="back" type="button" class="secondary">Voltar aos lutadores</button><button id="start" type="button">Iniciar duelo</button></div>
 </section>
 </div>
 <canvas hidden tabindex="0" width="960" height="500" aria-label="Arena de luta para dois jogadores"></canvas>
 <div class="controls" hidden>
+<div id="combat-classic-controls">
 <section><strong class="p1" id="player-0-name"></strong><p><kbd>A</kbd> <kbd>D</kbd> mover · <kbd>W</kbd> pular · <kbd>S</kbd> defender · consome a barra azul</p><p><kbd>F</kbd> soco · <kbd>R</kbd> chute · <kbd>G</kbd> <span id="player-0-special-0"></span> · <kbd>H</kbd> <span id="player-0-special-1"></span></p></section>
 <section><strong class="p2" id="player-1-name"></strong><p class="cpu-help" hidden>Controlado pelo computador · movimentação, defesa e golpes automáticos.</p><p><kbd>←</kbd> <kbd>→</kbd> mover · <kbd>↑</kbd> pular · <kbd>↓</kbd> defender · consome a barra azul</p><p><kbd>J</kbd> soco · <kbd>U</kbd> chute · <kbd>K</kbd> <span id="player-1-special-0">Super Abraço</span> · <kbd>L</kbd> <span id="player-1-special-1">Milkshake Turbo</span></p></section>
 </div>
+<section id="combat-v2-controls" hidden></section>
+</div>
 <p id="guard-tip" hidden>Segure a defesa e use as teclas de movimento para andar protegido. Segurar e bloquear golpes consome energia. Solte para recuperar.</p>
 <div id="fight-actions" class="actions" hidden><button type="button" id="change-fighters" class="secondary">Trocar lutadores ou arena</button><button type="button" id="rematch">Reiniciar duelo</button></div>
+<div id="combat-pause" hidden><div role="dialog" aria-modal="true" aria-labelledby="combat-menu-title"><h2 id="combat-menu-title">Menu do duelo</h2><button type="button" id="combat-resume">Continuar</button></div></div>
 </main>
+<script src="combat-art.js"></script>
+<script src="combat-stance-art.js"></script>
 <script src="game.js"></script>
+<script src="combat-audio.js"></script>
+<script src="combat-v2.js"></script>
 </html>
-
 
 
