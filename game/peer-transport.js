@@ -6,6 +6,8 @@ class ArenaPeerLink {
   constructor({host,signal,receive,change}) {
     this.host=host;this.signal=signal;this.receive=receive;this.change=change;
     this.candidates=[];this.closed=false;this.ready=false;
+    this.sentBytes=0;this.statesSent=0;this.statesSkipped=0;
+    this.stateCredit=24000;this.creditAt=performance.now();
     if(typeof RTCPeerConnection==='undefined')return;
     try{
       const pc=this.pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.cloudflare.com:3478'}]});
@@ -36,7 +38,7 @@ class ArenaPeerLink {
     };
     channel.onmessage=event=>{
       if(this.closed || typeof event.data!=='string' || event.data.length>131072)return;
-      try{const message=JSON.parse(event.data);if(message && typeof message.type==='string')this.receive(message);}catch{}
+      try{const message=ArenaWire.parse(event.data);if(message && typeof message.type==='string')this.receive(message);}catch{}
     };
     channel.onclose=()=>this.fallback();
     channel.onerror=()=>this.fallback();
@@ -64,11 +66,30 @@ class ArenaPeerLink {
     const disposable=message.type==='state' && message.phase!=='end';
     const channel=disposable?this.snapshots:this.controls;
     if(channel?.readyState!=='open'){this.fallback();return false;}
-    if(channel.bufferedAmount>65536){
-      if(disposable)return true; // A newer snapshot will replace this one.
+    if(disposable && channel.bufferedAmount>0){this.statesSkipped++;return true;}
+    if(channel.bufferedAmount>16384){
       this.fallback();return false;
     }
-    try{channel.send(JSON.stringify(message));return true;}catch{this.fallback();return false;}
+    try{
+      const payload=ArenaWire.stringify(message);
+      if(disposable){
+        const now=performance.now();
+        this.stateCredit=Math.min(24000,this.stateCredit+(now-this.creditAt)*24);this.creditAt=now;
+        if(payload.length>this.stateCredit){this.statesSkipped++;return true;}
+        this.stateCredit-=payload.length;this.statesSent++;
+      }
+      channel.send(payload);this.sentBytes+=payload.length;return true;
+    }catch{this.fallback();return false;}
+  }
+  async stats(){
+    if(!this.ready || !this.pc)return null;
+    const report=await this.pc.getStats();
+    const rows=[...report.values()];
+    const transport=rows.find(row=>row.type==='transport' && row.selectedCandidatePairId);
+    const pair=report.get(transport?.selectedCandidatePairId) || rows.find(row=>row.type==='candidate-pair' && row.nominated && row.state==='succeeded');
+    return {rtt:Number.isFinite(pair?.currentRoundTripTime)?pair.currentRoundTripTime*1000:null,
+      bytes:this.sentBytes,states:this.statesSent,skipped:this.statesSkipped,
+      queued:(this.controls?.bufferedAmount || 0)+(this.snapshots?.bufferedAmount || 0)};
   }
   fallback(notify=true){
     if(this.closed)return;

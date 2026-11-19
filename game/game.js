@@ -22,6 +22,7 @@ let stageIndex = 0;
 let online = null;
 let countdown=0,fightCue=0;
 const cpu={active:false,think:0,guard:0,jump:0,move:0,crouchGuard:false};
+const onlineFrames={at:0,count:0,fps:60};
 const cpuLevels={
   easy:{think:.30,variance:.20,guard:.23,jump:.28,special:.38,attack:.72},
   normal:{think:.18,variance:.16,guard:.38,jump:.45,special:.57,attack:1},
@@ -3433,6 +3434,11 @@ function resizeCombatCanvas(){
   ctx.setTransform(width/960,0,0,height/500,0,0);
 }
 function frame(now) {
+  onlineFrames.count++;
+  if(now-onlineFrames.at>=1000){
+    onlineFrames.fps=Math.round(onlineFrames.count*1000/(now-onlineFrames.at));
+    onlineFrames.at=now;onlineFrames.count=0;
+  }
   resizeCombatCanvas();
   syncDeafnessAudio();
   syncHeartbeatAudio();
@@ -3619,6 +3625,7 @@ function receiveOnline(message) {
         online.receivedSnapshot=message.snapshotSeq;
         online.stateReceivedAt=performance.now();
         const previous=fighters[1],previousRemote=fighters[0];
+        if(message.compact)message.fighters=message.fighters.map((a,i)=>({...characters[a.kind],keys:roster[i].keys,i,...a}));
         ({fighters,time,phase,banner}=message);
         if(previousRemote.warp!==fighters[0].warp)online.remotePaint=null;
         countdown=message.countdown ?? 0;fightCue=message.fightCue ?? 0;
@@ -3969,12 +3976,15 @@ function onlineSnapshot(session){
   }
   if(session.role!=='host' || !session.conn.open || !['countdown','fight','end'].includes(phase))return;
   if(phase==='end' && session.finalSent)return;
+  const now=performance.now(),interval=session.peerPing>180 ? 1000/15 : 1000/20;
+  if(phase!=='end' && now<(session.nextStateAt || 0))return;
+  session.nextStateAt=Math.max(now,(session.nextStateAt || now)+interval);
   advanceOnlineHost();
   sendOnline({type:'state',fighters,effects,time,phase,banner,reaction,countdown,fightCue,round:session.round,snapshotSeq:++session.snapshotSequence,
     embrace:embrace && {player:embrace.a.i,time:embrace.time},keys:[...keys],ack:session.acknowledgedInput});
   if(session.snapshot && (session.peerLink?.send(session.snapshot) ||
       session.socket.readyState===WebSocket.OPEN && session.socket.bufferedAmount<65536 &&
-      (session.socket.send(JSON.stringify({type:'messages',messages:[session.snapshot]})),true))){
+      (session.socket.send('{"type":"messages","messages":['+ArenaWire.stringify(session.snapshot)+']}'),true))){
     if(phase==='end')session.finalSent=true;
     session.snapshot=null;
   }
@@ -3986,7 +3996,10 @@ function paintNetwork(session){
   const route=session.peerLink?.ready ? 'Direto' : 'Via servidor';
   const text=ping===undefined ? route+' · medindo ping…' :
     route+' · Ping entre jogadores '+Math.round(ping)+' ms · '+(session.jitter>25 ? 'oscilando' : 'estável');
-  document.querySelector('#network-status').textContent=text;
+  const detail=['countdown','fight'].includes(phase)
+    ? '\n'+(Number.isFinite(session.networkRtt)?'Rede '+Math.round(session.networkRtt)+' ms · ':'')+onlineFrames.fps+' FPS'+
+      (session.outboundKbps!==undefined?' · envio '+session.outboundKbps.toFixed(1)+' KB/s':'') : '';
+  document.querySelector('#network-status').textContent=text+detail;
 }
 
 function receiveTransport(session,message){
@@ -4027,6 +4040,16 @@ function connectRealtime(session){
         const now=performance.now();
         if(now-session.lastPong>12000){leaveOnline('A conexão foi interrompida. Crie uma nova sala.');return;}
         socket.send(JSON.stringify({type:'ping',at:now}));
+        if(session.peerLink?.ready && !session.readingStats){
+          session.readingStats=true;
+          session.peerLink.stats().then(stats=>{
+            if(online!==session || !session.peerLink?.ready || !stats)return;
+            session.networkRtt=stats.rtt;
+            if(session.statsAt)session.outboundKbps=(stats.bytes-(session.statsBytes || 0))/(performance.now()-session.statsAt);
+            session.statsAt=performance.now();session.statsBytes=stats.bytes;
+            paintNetwork(session);
+          }).catch(()=>{}).finally(()=>{session.readingStats=false;});
+        }
         if(session.conn.open){
           if(session.probeAt!==undefined)session.missedProbes=(session.missedProbes||0)+1;
           session.probeAt=now;
@@ -4052,6 +4075,7 @@ function connectRealtime(session){
         change:()=>{
           if(online!==session)return;
           session.peerPing=undefined;session.probeAt=undefined;session.missedProbes=0;session.jitter=0;
+          session.networkRtt=null;session.outboundKbps=undefined;session.statsAt=0;session.statsBytes=0;
           for(const input of session.pendingInputs || [])input.sentAt=0;
           paintNetwork(session);
         }});
@@ -4061,7 +4085,7 @@ function connectRealtime(session){
       return;
     }
     if(data.type==='messages'){
-      for(const message of data.messages)receiveTransport(session,message);
+      for(const message of data.messages)receiveTransport(session,ArenaWire.unpack(message));
     }
   };
   socket.onclose=()=>{

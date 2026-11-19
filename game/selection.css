@@ -1,5 +1,5 @@
 #selection{--selection-border:#4b495b;--selection-bg:#151522;max-width:1380px}
-#network-status{color:#b1efd3;font-size:12px;margin-left:auto;text-align:right}
+#network-status{color:#b1efd3;font-size:12px;margin-left:auto;text-align:right;white-space:pre-line;line-height:1.5}
 #network-status:empty{display:none}
 body:has(#selection:not([hidden])) main{padding-block:clamp(9px,2dvh,20px)}
 body:has(#selection:not([hidden])) header{margin-bottom:9px}
