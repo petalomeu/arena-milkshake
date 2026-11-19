@@ -120,7 +120,7 @@ const combat2 = (() => {
     return {startup:Math.max(3,move.start+windup-fastMedium-quickLight-(chaining ? 2 : 0)-(a.baby>0 ? 2 : 0)),
       recovery:Math.max(5,Math.round((move.recover+settle)*p.recovery*(a.baby>0 ? .72 : 1)))+(repeated ? 4 : 0)};
   }
-  function begin(a,b,name,air=false,dashStrike=false){
+  function begin(a,b,name,air=false,dashStrike=false,inputSeq=online?.handlingInput || 0){
     const move=definitions[name];
     const chaining=ladder(a,name);
     const last=a.v2.repetition;
@@ -128,7 +128,8 @@ const combat2 = (() => {
     if(!last || last.name===name)a.v2.repetition={name,count:last ? last.count+1 : 1,ticks:60};
     const {startup,recovery}=timings(a,name,chaining,repeated);
     if(!chaining){a.v2.chain=0;a.v2.chainClock=0;}
-    a.v2.attack={name,age:0,startup,recovery,used:false,hit:false,air,dashStrike,repeated};
+    a.netActionId=(a.netActionId || 0)+1;a.netActionInput=inputSeq;
+    a.v2.attack={name,age:0,startup,recovery,used:false,hit:false,air,dashStrike,repeated,id:a.netActionId,inputSeq};
     a.v2.buffer=null;
     a.v2.move=0;
     a.v2.dashCombo=0;
@@ -140,13 +141,13 @@ const combat2 = (() => {
     combatCue((name.startsWith('punch') ? 'punch_' : 'kick_')+power);
     if(move.level>=2)combatCue('effort_'+(a.kind===7 ? 'female' : a.kind===2 || a.kind===14 || a.kind===9 && a.ascended ? 'deep' : 'male'));
   }
-  function basic(a,b,name){
+  function basic(a,b,name,inputSeq=online?.handlingInput || 0){
     const v=a.v2;
     if(phase!=='fight' || cannotAct(a) || embrace || a.charge || v.escape)return;
     if(v.dashCombo>0 && !v.attack && !v.crouch && !a.nap && a.y===ground &&
         !a.action && !a.recovery && (name==='punch3' || name==='kick3')){
       v.dash=0;
-      begin(a,b,name,false,true);
+      begin(a,b,name,false,true,inputSeq);
       return;
     }
     if(v.dash)return;
@@ -158,15 +159,15 @@ const combat2 = (() => {
     name=moveFromStance(a,name,a.v2.crouch);
     const running=a.v2.attack;
     if(running){
-      if(ladder(a,name) && running.age>=running.startup+definitions[running.name].active){begin(a,b,name);return;}
+      if(ladder(a,name) && running.age>=running.startup+definitions[running.name].active){begin(a,b,name,false,false,inputSeq);return;}
       const remaining=running.startup+definitions[running.name].active+running.recovery-running.age;
       if(remaining<=7 || definitions[name].level===definitions[running.name].level+1 && running.age>=running.startup-3){
-        a.v2.buffer={name,until:hostTick+8};
+        a.v2.buffer={name,until:hostTick+8,inputSeq};
       }
       return;
     }
     if(a.action>.12 || a.recovery>0 || defending(a))return;
-    begin(a,b,name,a.y<ground || a.vy<0);
+    begin(a,b,name,a.y<ground || a.vy<0,false,inputSeq);
   }
   function moveFromStance(a,name,crouching){
     return name==='kick3' && crouching && a.y===ground ? 'sweep' : name;
@@ -268,7 +269,7 @@ const combat2 = (() => {
       if(action==='crouch')online.previewCrouch=down;
       const physical=a.keys[keyByAction[action]];
       if(physical){if(down)online.localKeys.add(physical);else online.localKeys.delete(physical);}
-      const seq=++online.inputSequence;
+      const seq=queueGuestInput(action,down);
       const dashStrike=a.v2.dashCombo>0 && !(online.previewCrouch ?? a.v2.crouch) &&
         a.y===ground && (action==='punch3' || action==='kick3');
       if(down && definitions[action] && !cannotAct(a) && !a.v2.attack && !a.action && !a.charge &&
@@ -277,10 +278,10 @@ const combat2 = (() => {
         const name=moveFromStance(a,action,online.previewCrouch ?? a.v2.crouch);
         const repeat=a.v2.repetition;
         const {startup,recovery}=timings(a,name,false,repeat?.name===name && repeat.count>=2);
-        online.basicPreview={seq,move:{name,age:0,startup,recovery,air:a.y<ground || a.vy<0,dashStrike}};
+        online.basicPreview={seq,startedAt:performance.now(),move:{name,age:0,startup,recovery,air:a.y<ground || a.vy<0,dashStrike,inputSeq:seq}};
       }
       if(down && (action==='special1' || action==='special2'))predictAttack(a,Number(action.at(-1)),seq);
-      sendOnline({type:'key',code:action,down,seq});
+      predictGuestMotion(a,action,down,seq);
     }else input(player,action,down);
   }
   function keyboard(event,down){
@@ -446,10 +447,11 @@ const combat2 = (() => {
       const data=definitions[attack.name];
       const next=v.buffer && v.buffer.until>=hostTick ? v.buffer.name : '';
       if(next && ladder(actor,next) && attack.age>=attack.startup+data.active){
-        begin(actor,fighters[1-actor.i],next);
+        begin(actor,fighters[1-actor.i],next,false,false,v.buffer.inputSeq);
       }else if(attack.age>=attack.startup+data.active+attack.recovery){
+        const sequence=v.buffer?.inputSeq;
         v.attack=null;v.buffer=null;
-        if(next)basic(actor,fighters[1-actor.i],next);
+        if(next)basic(actor,fighters[1-actor.i],next,sequence);
       }
     }
   }

@@ -690,6 +690,8 @@ function attack(a,b,slot,legacyBasic=false) {
     a.v2.energyNotice=0;
   }
   if (a.kind===9 && (slot===0 || slot===3)) a.orsiStood=true;
+  a.netActionId=(a.netActionId || 0)+1;
+  a.netActionInput=online?.handlingInput || 0;
   a.face = Math.sign(b.x-a.x) || a.face;
   a.cool[slot] = cooldownFor(a,slot);
   a.recovery=a.kind===14 && a.baby>0 && (slot===0 || slot===3) ? (slot===0 ? .34 : .50) : slot===0 ? .68 : slot===3 ? .82 : .70;
@@ -1114,7 +1116,7 @@ start.onclick = () => {
     if(online)online.rules2=wants && online.remoteRules2===true;
     combat2.start(wants);
   }
-  if (online) sendOnline({type:'start',picks,stageIndex,rules2:online.rules2===true});
+  if (online){online.round=(online.round || 0)+1;sendOnline({type:'start',picks,stageIndex,rules2:online.rules2===true,round:online.round});}
   startFight();
 };
 function startFight() {
@@ -1137,10 +1139,16 @@ function startFight() {
     online.basicPreview=null;
     online.previewCrouch=null;
     online.combatPaint=null;
+    online.remotePaint=null;
     online.localKeys = new Set();
     online.pendingInputs = [];
+    online.inputBuffer=new Map();
+    online.visualAttacks=new Map();
+    online.motionPreview=null;
     online.predictedAttack = 0;
     online.predictedDash = null;
+    online.specialPaint=null;
+    online.finalSent=false;
   }
   canvas.focus({preventScroll:true});
 };
@@ -3382,7 +3390,7 @@ function hud() {
 function advanceOnlineHost() {
   if (online?.role !== 'host' || (phase !== 'fight' && phase !== 'countdown')) return;
   const now=performance.now();
-  let elapsed=Math.min(.3,Math.max(0,(now-online.simulatedAt)/1000));
+  let elapsed=Math.min(.3,Math.max(0,(now-(online.simulatedAt ?? now))/1000));
   online.simulatedAt=now;
   if(usesCombat2()){combat2.advance(elapsed,update);return;}
   while(elapsed>0 && (phase==='fight' || phase==='countdown')) {
@@ -3463,7 +3471,7 @@ function frame(now) {
       last=now;
     }
   } else {
-    fighter(fighters[0]);
+    fighter(online?.role==='guest' && phase==='fight' ? advanceRemoteVisual(dt) : fighters[0]);
   }
   if (online?.role==='guest' && phase==='fight') {
     fighter(advanceGuestVisual(dt),online.localKeys);
@@ -3496,6 +3504,8 @@ function frame(now) {
 const roomStatus = document.querySelector('#room-status');
 function sendOnline(message) {
   if (!online?.conn?.open) return;
+  if(message.type==='state'){online.snapshot=message;return;}
+  if(['key','audio','net-probe','net-pong'].includes(message.type) && online.peerLink?.send(message))return;
   if(online.socket){
     if(message.type==='state')online.snapshot=message;
     else if(online.socket.readyState===WebSocket.OPEN)online.socket.send(JSON.stringify({type:'messages',messages:[message]}));
@@ -3509,6 +3519,13 @@ function sendOnline(message) {
       void syncRoom(online);
     }
   }
+}
+function queueGuestInput(code,down){
+  const seq=++online.inputSequence;
+  const input={seq,code,down,at:performance.now(),sentAt:performance.now(),round:online.round};
+  online.pendingInputs.push(input);
+  sendOnline({type:'key',code,down,seq,round:online.round});
+  return seq;
 }
 function onlineKey(e,down) {
   const player = online.role === 'host' ? 0 : 1;
@@ -3526,14 +3543,12 @@ function onlineKey(e,down) {
       if (pressed.has(e.code)===down) return;
       if (down) pressed.add(e.code);
       else pressed.delete(e.code);
-      const seq=++online.inputSequence;
-      online.pendingInputs.push({seq,at:performance.now()});
+      const seq=queueGuestInput(e.code,down);
       const index=keyboard.indexOf(e.code);
       if (down && !embrace) {
         if (index===2) jump(online.visual,pressed);
         if (index>=4) predictAttack(online.visual,index-4,seq);
       }
-      sendOnline({type:'key',code:e.code,down,seq});
     }
     else applyOnlineKey(player,e.code,down);
   }
@@ -3577,6 +3592,7 @@ function receiveOnline(message) {
       break;
     case 'start':
       if (guest && Array.isArray(message.picks) && message.picks.length===2 && message.picks.every(kind=>characters[kind]) && stages[message.stageIndex]) {
+        online.round=message.round;
         online.rules2=typeof combat2!=='undefined' && message.rules2===true;
         document.querySelector('#combat-rules').value=online.rules2 ? 'v2' : 'classic';
         if(typeof combat2!=='undefined')combat2.start(online.rules2);
@@ -3587,16 +3603,24 @@ function receiveOnline(message) {
       break;
     case 'key':
       if (guest || phase !== 'fight') break;
-      if (Number.isSafeInteger(message.seq)) {
-        if (message.seq<=online.acknowledgedInput) break;
-        online.acknowledgedInput=message.seq;
+      if(message.round!==online.round || !Number.isSafeInteger(message.seq) || message.seq<=online.acknowledgedInput || message.seq>online.acknowledgedInput+256)break;
+      (online.inputBuffer ||= new Map()).set(message.seq,message);
+      advanceOnlineHost();
+      while(online.inputBuffer.has(online.acknowledgedInput+1)){
+        const next=online.inputBuffer.get(++online.acknowledgedInput);
+        online.inputBuffer.delete(online.acknowledgedInput);
+        online.handlingInput=next.seq;
+        try{applyOnlineKey(1,next.code,Boolean(next.down));}finally{online.handlingInput=0;}
       }
-      applyOnlineKey(1,message.code,Boolean(message.down));
       break;
     case 'state':
       if (guest && (phase === 'countdown' || phase === 'fight' || phase === 'end')) {
-        const previous=fighters[1];
+        if(message.round!==online.round || message.snapshotSeq<=online.receivedSnapshot)return;
+        online.receivedSnapshot=message.snapshotSeq;
+        online.stateReceivedAt=performance.now();
+        const previous=fighters[1],previousRemote=fighters[0];
         ({fighters,time,phase,banner}=message);
+        if(previousRemote.warp!==fighters[0].warp)online.remotePaint=null;
         countdown=message.countdown ?? 0;fightCue=message.fightCue ?? 0;
         effects=message.effects ?? [];
         if (reaction !== message.reaction) reactionStarted=performance.now();
@@ -3645,6 +3669,7 @@ function predictAttack(a,slot,sequence) {
   a.cool[slot]=cooldownFor(a,slot);
   a.recovery=a.kind===14 && a.baby>0 && (slot===0 || slot===3) ? (slot===0 ? .34 : .50) : slot===0 ? .68 : slot===3 ? .82 : .70;
   online.predictedAttack=sequence;
+  online.specialPaint={seq:sequence,startedAt:performance.now(),duration:a.action,label:a.label};
   if (a.kind===10 && slot===0 && a.printedTier>=0) a.label=printedItems[a.printedTier].toUpperCase();
   if (a.kind===7 && slot===1) a.frenzy=3;
   if (a.kind===7 && slot===2) a.regen=7;
@@ -3669,7 +3694,13 @@ function reconcileGuestVisual(previous,ack=0) {
   const attackPending=online.predictedAttack>ack;
   if(usesCombat2()){
     if(warped)online.combatPaint=null;
-    if(interrupted || phase!=='fight' || online.basicPreview?.seq<=ack)online.basicPreview=null;
+    if(interrupted || phase!=='fight'){
+      online.basicPreview=null;online.motionPreview=null;online.specialPaint=null;online.visualAttacks.clear();
+    }else{
+      if(online.basicPreview?.seq<=ack && confirmed.v2.attack?.inputSeq!==online.basicPreview.seq)online.basicPreview=null;
+      if(online.motionPreview?.seq<=ack)online.motionPreview=null;
+      if(online.specialPaint?.seq<=ack && confirmed.netActionInput!==online.specialPaint.seq)online.specialPaint=null;
+    }
     online.visual={...confirmed,cool:[...confirmed.cool]};
     if(!interrupted && attackPending){
       online.visual.action=visual.action;
@@ -3686,10 +3717,12 @@ function reconcileGuestVisual(previous,ack=0) {
   }
   if (!attackPending) {
     const previousLabel=visual.label;
-    const sameMove=previousLabel===confirmed.label && visual.action && confirmed.action;
+    const sameMove=previousLabel===confirmed.label && (visual.netActionId===confirmed.netActionId ||
+      confirmed.netActionInput>0 && confirmed.netActionInput===online.predictedAttack);
     visual.actionDuration=confirmed.actionDuration;
     visual.action=sameMove ? Math.min(visual.action,confirmed.action) : confirmed.action;
     visual.label=confirmed.label;
+    visual.netActionId=confirmed.netActionId;
     visual.recovery=confirmed.recovery;
     visual.buff=confirmed.buff;
     visual.frenzy=confirmed.frenzy;
@@ -3753,6 +3786,66 @@ function reconcileGuestVisual(previous,ack=0) {
   if (!online.pendingInputs.length && !online.localKeys.has(confirmed.keys[2]) && confirmed.y===ground && visual.y===ground) visual.vy=0;
 }
 
+function predictGuestMotion(a,action,down,seq){
+  if(!a?.v2 || a.stun || a.frozen || a.guardBreak || a.tumble || a.snare || a.asleep || embrace)return;
+  const now=performance.now(),p=combat2.profiles[a.kind],paint=online.combatPaint || a;
+  if(action==='jump' && !a.action && !a.charge && !a.v2.attack && !a.v2.dash && !online.localKeys.has(a.keys[3])){
+    const pending=online.motionPreview;
+    const jumps=pending?.kind==='jump'?pending.jumps:a.v2.jumps;
+    if(down && (paint.y>=ground || jumps===1)){
+      const grounded=paint.y>=ground;
+      online.motionPreview={kind:'jump',seq,startedAt:now,y:paint.y,vy:-(grounded?p.jumpHeight:p.airJump+275),jumps:grounded?1:2};
+    }else if(!down && pending?.kind==='jump' && pending.jumps===1){
+      const t=(now-pending.startedAt)/1000;
+      const vy=pending.vy+1300*t;
+      if(vy<0){pending.y+=pending.vy*t+650*t*t;pending.vy=vy*.56;pending.startedAt=now;pending.seq=seq;}
+    }
+  }
+  if(down && (action==='left' || action==='right')){
+    const taps=online.motionTaps ||= {};
+    if(now-(taps[action] ?? -1000)<=13/60*1000 && a.y===ground && !a.action && !a.charge && !a.v2.dashWait && !a.v2.crouch){
+      const direction=action==='left'?-1:1;
+      online.motionPreview={kind:'dash',seq,startedAt:now,x:paint.x,direction,duration:(p.dashLength+2)/60};
+      taps[action]=-1000;
+    }else taps[action]=now;
+  }
+}
+
+function guestBasicPose(move,preview){
+  if(!move)return null;
+  const id=move.inputSeq?'input:'+move.inputSeq:'action:'+move.id;
+  const now=performance.now();
+  const cache=online.visualAttacks;
+  let timeline=cache.get(id);
+  if(!timeline){
+    const age=preview?(now-preview.startedAt)*.06:move.age;
+    timeline={age,at:now};cache.set(id,timeline);
+    if(cache.size>24)cache.delete(cache.keys().next().value);
+  }else{
+    timeline.age=Math.max(timeline.age+(now-timeline.at)*.06,move.age);
+    timeline.at=now;
+  }
+  const total=move.startup+combat2.definitions[move.name].active+move.recovery;
+  return timeline.age<total?{...move,age:timeline.age}:null;
+}
+
+function advanceRemoteVisual(dt){
+  const a=fighters[0];
+  const elapsed=Math.min(.05,Math.max(0,(performance.now()-(online.stateReceivedAt || performance.now()))/1000));
+  const v=a.v2;
+  const speed=a.charge?a.face*800:v?.dash?v.direction*combat2.profiles[a.kind].dash:v?.move || 0;
+  const targetX=Math.max(55,Math.min(905,a.x+(speed+a.vx)*elapsed));
+  const targetY=a.y<ground?Math.min(ground,a.y+a.vy*elapsed+650*elapsed*elapsed):ground;
+  let paint=online.remotePaint;
+  if(!paint || Math.abs(paint.x-a.x)>95 || a.stun || a.frozen || embrace)online.remotePaint=paint={x:a.x,y:a.y};
+  else{
+    paint.x+=(targetX-paint.x)*Math.min(1,dt*36);
+    paint.y+=(targetY-paint.y)*Math.min(1,dt*36);
+  }
+  const attack=v?.attack?guestBasicPose(v.attack,null):null;
+  return {...a,...paint,action:Math.max(0,a.action-elapsed),v2:v?{...v,attack}:v};
+}
+
 function advanceGuestVisual(dt) {
   const visual=online.visual;
   const confirmed=fighters[1];
@@ -3767,21 +3860,34 @@ function advanceGuestVisual(dt) {
       const p=combat2.profiles[confirmed.kind];
       const direction=Number(pressed.has(confirmed.keys[1]))-Number(pressed.has(confirmed.keys[0]));
       const walking=!(confirmed.action || preview || confirmed.v2.dash || confirmed.v2.escape || confirmed.charge || confirmed.v2.crouch || confirmed.asleep);
-      let desired=confirmed.x+(walking ? direction*Math.min(27,p.walk*(online.lead ?? .06)) : 0);
-      const own= combat2.box(confirmed,'push'), other=combat2.box(opponent,'push');
+      const lead=Math.min(.12,(online.lead ?? .04)+(performance.now()-(online.stateReceivedAt || performance.now()))/1000);
+      const motion=online.motionPreview;
+      let desired=confirmed.x+(walking ? direction*Math.min(45,p.walk*lead) : confirmed.v2.dash ? confirmed.v2.direction*p.dash*lead : 0);
+      let desiredY=confirmed.y<ground?Math.min(ground,confirmed.y+confirmed.vy*lead+650*lead*lead):ground;
+      if(motion?.kind==='jump'){
+        const t=(performance.now()-motion.startedAt)/1000;
+        desiredY=Math.min(ground,motion.y+motion.vy*t+650*t*t);
+      }else if(motion?.kind==='dash'){
+        const t=Math.min(motion.duration,(performance.now()-motion.startedAt)/1000);
+        desired=motion.x+motion.direction*p.dash*t*(motion.direction===confirmed.face?1:.88);
+      }
+      if(!direction && online.pendingInputs.some(input=>['left','right'].includes(input.code)))desired=paint.x;
+      const own=combat2.box({...confirmed,y:desiredY},'push'),other=combat2.box(opponent,'push');
       if(own.y<other.y+other.h && own.y+own.h>other.y && !confirmed.charge && !opponent.charge && !confirmed.v2.escape && !opponent.v2.escape){
         const separation=(own.w+other.w)/2;
         desired=confirmed.x>=opponent.x ? Math.max(desired,opponent.x+separation) : Math.min(desired,opponent.x-separation);
       }
-      paint.x+=(Math.max(55,Math.min(905,desired))-paint.x)*Math.min(1,dt*(confirmed.v2.escape ? 26 : 16));
-      paint.y+=(confirmed.y-paint.y)*Math.min(1,dt*20);
+      paint.x+=(Math.max(55,Math.min(905,desired))-paint.x)*Math.min(1,dt*26);
+      paint.y+=(Math.max(104,desiredY)-paint.y)*Math.min(1,dt*32);
     }
-    if(!preview || confirmed.stun || confirmed.frozen || confirmed.v2.attack)return {...visual,...paint};
-    preview.move.age+=dt*60;
-    if(preview.move.age>preview.move.startup+combat2.definitions[preview.move.name].active+preview.move.recovery){
-      online.basicPreview=null;return {...visual,...paint};
-    }
-    return {...visual,...paint,v2:{...visual.v2,attack:preview.move}};
+    const move=confirmed.stun || confirmed.frozen ? null : guestBasicPose(confirmed.v2.attack || preview?.move,
+      !confirmed.v2.attack || confirmed.v2.attack.inputSeq===preview?.seq ? preview : null);
+    const special=online.specialPaint;
+    const action=special && (confirmed.netActionInput===special.seq || online.predictedAttack>online.acknowledgedInput)
+      ? Math.min(visual.action,Math.max(0,special.duration-(performance.now()-special.startedAt)/1000)) : visual.action;
+    const moving=pressed.has(confirmed.keys[0]) || pressed.has(confirmed.keys[1]);
+    paint.moveTime=moving && !move && !action?(paint.moveTime || 0)+dt:0;
+    return {...visual,...paint,action,v2:{...visual.v2,crouch:online.previewCrouch ?? visual.v2.crouch,attack:move}};
   }
   updateGuard(visual,dt,pressed,false);
   if (embrace || confirmed.frozen || confirmed.stun || confirmed.guardBreak || confirmed.snare || confirmed.flash || confirmed.asleep || confirmed.sleepRecovery || confirmed.bedWalk) return confirmed;
@@ -3839,6 +3945,7 @@ function leaveOnline(text,notify=true) {
     clearTimeout(session.timer);
     clearInterval(session.liveTimer);
     clearInterval(session.pingTimer);
+    session.peerLink?.close();
     session.socket?.close();
     session.abort.abort();
     if(notify && session.token) roomRequest('leave',{code:session.code,token:session.token}).catch(()=>{});
@@ -3850,14 +3957,25 @@ function leaveOnline(text,notify=true) {
 }
 
 function onlineSnapshot(session){
+  if(online!==session)return;
+  if(session.role==='guest'){
+    if(phase!=='fight')return;
+    const now=performance.now();
+    for(const input of session.pendingInputs || [])if(now-input.sentAt>Math.max(150,(session.peerPing || 100)*1.25)){
+      input.sentAt=now;
+      sendOnline({type:'key',code:input.code,down:input.down,seq:input.seq,round:input.round});
+    }
+    return;
+  }
   if(session.role!=='host' || !session.conn.open || !['countdown','fight','end'].includes(phase))return;
   if(phase==='end' && session.finalSent)return;
-  if(phase==='end')session.finalSent=true;
   advanceOnlineHost();
-  sendOnline({type:'state',fighters,effects,time,phase,banner,reaction,countdown,fightCue,
+  sendOnline({type:'state',fighters,effects,time,phase,banner,reaction,countdown,fightCue,round:session.round,snapshotSeq:++session.snapshotSequence,
     embrace:embrace && {player:embrace.a.i,time:embrace.time},keys:[...keys],ack:session.acknowledgedInput});
-  if(session.socket.readyState===WebSocket.OPEN && session.snapshot && session.socket.bufferedAmount<65536){
-    session.socket.send(JSON.stringify({type:'messages',messages:[session.snapshot]}));
+  if(session.snapshot && (session.peerLink?.send(session.snapshot) ||
+      session.socket.readyState===WebSocket.OPEN && session.socket.bufferedAmount<65536 &&
+      (session.socket.send(JSON.stringify({type:'messages',messages:[session.snapshot]})),true))){
+    if(phase==='end')session.finalSent=true;
     session.snapshot=null;
   }
 }
@@ -3865,9 +3983,24 @@ function onlineSnapshot(session){
 function paintNetwork(session){
   if(online!==session)return;
   const ping=session.peerPing;
-  const text=ping===undefined ? 'WebSocket · medindo ping…' :
-    'Ping entre jogadores '+Math.round(ping)+' ms · '+(session.jitter>25 ? 'oscilando' : 'estável');
+  const route=session.peerLink?.ready ? 'Direto' : 'Via servidor';
+  const text=ping===undefined ? route+' · medindo ping…' :
+    route+' · Ping entre jogadores '+Math.round(ping)+' ms · '+(session.jitter>25 ? 'oscilando' : 'estável');
   document.querySelector('#network-status').textContent=text;
+}
+
+function receiveTransport(session,message){
+  if(online!==session)return;
+  if(message.type==='rtc'){
+    void session.peerLink?.accept(message.signal || {});
+  }else if(message.type==='net-probe')sendOnline({type:'net-pong',at:message.at});
+  else if(message.type==='net-pong'){
+    if(message.at!==session.probeAt)return;
+    const sample=performance.now()-message.at;
+    session.jitter=session.peerPing===undefined?0:(session.jitter || 0)*.75+Math.abs(sample-session.peerPing)*.25;
+    session.peerPing=sample;session.probeAt=undefined;session.missedProbes=0;
+    paintNetwork(session);
+  }else receiveOnline(message);
 }
 
 function connectRealtime(session){
@@ -3898,7 +4031,10 @@ function connectRealtime(session){
           if(session.probeAt!==undefined)session.missedProbes=(session.missedProbes||0)+1;
           session.probeAt=now;
           sendOnline({type:'net-probe',at:now});
-          if(session.missedProbes>=2)document.querySelector('#network-status').textContent='Aguardando resposta do outro jogador…';
+          if(session.missedProbes>=2){
+            session.peerLink?.fallback();
+            document.querySelector('#network-status').textContent='Aguardando resposta do outro jogador…';
+          }
         }
       },1000);
       return;
@@ -3910,22 +4046,22 @@ function connectRealtime(session){
     }
     if(data.type==='connected'){
       session.conn.open=true;
+      session.peerLink=new ArenaPeerLink({host:session.role==='host',
+        signal:signal=>{if(online===session)sendOnline({type:'rtc',signal});},
+        receive:message=>receiveTransport(session,message),
+        change:()=>{
+          if(online!==session)return;
+          session.peerPing=undefined;session.probeAt=undefined;session.missedProbes=0;session.jitter=0;
+          for(const input of session.pendingInputs || [])input.sentAt=0;
+          paintNetwork(session);
+        }});
       showCharacters();
       roomStatus.textContent='Sala '+session.code+' · '+(session.role==='host'?'Player 2 conectado.':'Conectado como Player 2.');
       paintNetwork(session);
       return;
     }
     if(data.type==='messages'){
-      for(const message of data.messages){
-        if(message.type==='net-probe')sendOnline({type:'net-pong',at:message.at});
-        else if(message.type==='net-pong'){
-          if(message.at!==session.probeAt)continue;
-          const sample=performance.now()-message.at;
-          session.jitter=session.peerPing===undefined?0:(session.jitter||0)*.75+Math.abs(sample-session.peerPing)*.25;
-          session.peerPing=sample;session.probeAt=undefined;session.missedProbes=0;
-          paintNetwork(session);
-        }else receiveOnline(message);
-      }
+      for(const message of data.messages)receiveTransport(session,message);
     }
   };
   socket.onclose=()=>{
@@ -3975,7 +4111,7 @@ async function openRoom(role,code) {
   activateAudio();
   cpu.active=false;resetCPU();
   if(online) leaveOnline('');
-  const session={role,conn:{open:false},abort:new AbortController(),queue:[],snapshot:null,simulatedAt:0,after:0};
+  const session={role,conn:{open:false},abort:new AbortController(),queue:[],snapshot:null,simulatedAt:0,after:0,snapshotSequence:0,receivedSnapshot:0};
   online=session;
   updateModeUI();
   roomStatus.textContent=role==='host' ? 'Criando sala…' : 'Entrando na sala…';
