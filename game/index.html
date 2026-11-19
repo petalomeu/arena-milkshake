@@ -32,19 +32,29 @@ canvas{display:block;background:#080a10;border-radius:8px;width:min(100%,calc((1
 @media(max-width:700px){.champion-preview{grid-template-columns:minmax(100px,28%) minmax(0,1fr);min-height:244px}.champion-preview img{height:208px}.champion-preview strong{font-size:28px;min-height:0}}
 @media(max-width:420px){.champion-preview{grid-template-columns:90px minmax(0,1fr);gap:10px}.champion-preview strong{font-size:24px}.champion-preview .special-name{padding:5px 7px}}
 </style>
+<link rel="stylesheet" href="selection.css">
 <main>
-<header><h1>Arena Milkshake</h1><button id="fullscreen" type="button" class="secondary" aria-label="Ativar tela cheia">Tela cheia ⛶</button></header>
-<div class="connection-bar"><div class="actions"><button id="create-room" type="button">Criar sala online</button><input id="room-code" placeholder="Código da sala" aria-label="Código da sala" maxlength="10"><button id="join-room" type="button">Entrar na sala</button><button id="cpu-mode" type="button" class="secondary" aria-pressed="false">Contra a máquina</button><button id="local-mode" type="button" class="secondary" aria-pressed="true">2 jogadores locais</button></div><p id="room-status" role="status"></p></div>
+<header><h1>Arena Milkshake</h1><span id="network-status" role="status" aria-live="polite"></span><button id="fullscreen" type="button" class="secondary" aria-label="Ativar tela cheia">Tela cheia ⛶</button></header>
+<div class="connection-bar"><div class="actions"><button id="create-room" type="button">Criar sala online</button><input id="room-code" placeholder="Código da sala" aria-label="Código da sala" maxlength="10"><button id="join-room" type="button">Entrar na sala</button></div><p id="room-status" role="status"></p></div>
 <div id="selection">
 <section id="characters">
 <div class="selection-heading"><div><span class="eyebrow">Duelo 1 contra 1 · escolha seu lado</span><h2>Escolha seu campeão</h2><p>Selecione um personagem, confira os golpes especiais e confirme para avançar.</p></div><span class="mode-chip">Arena de combate</span></div>
 <div class="players">
-<section class="player-panel"><div class="player-heading"><div class="player-title"><span class="player-index">01</span><h3 class="p1">Player 1</h3></div><p class="player-help"><kbd>A</kbd> <kbd>D</kbd> escolher · <kbd>F</kbd> confirmar</p></div><div class="fighter-cards"></div><button class="confirm" type="button">Confirmar campeão</button></section>
+<section class="player-panel"><div class="player-heading"><div class="player-title"><span class="player-index">01</span><h3 class="p1">Player 1</h3></div><p class="player-help">Setas para escolher · <kbd>Enter</kbd> confirmar</p></div><div class="fighter-cards"></div><button class="confirm" type="button">Confirmar campeão</button></section>
 <section class="player-panel"><div class="player-heading"><div class="player-title"><span class="player-index">02</span><h3 class="p2">Player 2</h3></div><p class="player-help"><kbd>←</kbd> <kbd>→</kbd> escolher · <kbd>J</kbd> confirmar</p></div><div class="fighter-cards"></div><button class="confirm" type="button">Confirmar campeão</button></section>
+</div>
+<div class="match-menu" aria-label="Configuração do duelo">
+  <div class="match-modes" role="group" aria-label="Tipo de partida">
+    <button id="cpu-mode" type="button" class="secondary" aria-pressed="false">Contra a máquina</button>
+    <button id="local-mode" type="button" class="secondary" aria-pressed="true">Dois jogadores locais</button>
+  </div>
+  <label>Dificuldade <select id="cpu-difficulty"><option value="easy">Fácil</option><option value="normal" selected>Normal</option><option value="hard">Difícil</option></select></label>
+  <label>Modo de combate <select id="combat-rules"><option value="classic">Clássico</option><option value="v2">Combate 2.0</option></select></label>
 </div>
 </section>
 <section id="stages" hidden>
-<h2>Escolham a arena</h2>
+<div class="selection-heading"><div><h2>Escolha a arena</h2><p>Use as setas para navegar e Enter para iniciar.</p></div></div>
+<div class="stage-feature"><img id="stage-feature-image" alt=""><strong id="stage-feature-name"></strong></div>
 <div class="stage-cards">
 <button class="stage-card" type="button"><img src="stage-milkshake.webp" alt=""><span>Milkshake Down</span></button>
 <button class="stage-card" type="button"><img src="stage-ure.webp" alt=""><span>Arena dos Campeões</span></button>
@@ -52,8 +62,8 @@ canvas{display:block;background:#080a10;border-radius:8px;width:min(100%,calc((1
 <button class="stage-card" type="button"><img src="stage-grafica.webp" alt=""><span>Gráfica do Matheus</span></button>
 <button class="stage-card" type="button"><img src="stage-cofre.webp" alt=""><span>Cofre do Grau</span></button>
 </div>
+<div class="actions"><button id="back" type="button" class="secondary">Voltar aos lutadores</button><button id="start" type="button">Iniciar duelo</button></div>
 <div class="combat-settings">
-  <label>Regras <select id="combat-rules"><option value="classic">Clássico</option><option value="v2">Combate 2.0</option></select></label>
   <details>
     <summary>Remapear teclas do Combate 2.0</summary>
     <div class="actions">
@@ -68,13 +78,12 @@ canvas{display:block;background:#080a10;border-radius:8px;width:min(100%,calc((1
     <summary>Áudio</summary>
     <div class="actions">
       <label>Mixagem <select id="combat-audio-mix"><option value="recorded">Gravações</option><option value="classic">Anterior</option></select></label>
-      <label>Ambiente <input type="range" id="combat-ambient-volume" min="0" max="100" value="30"></label>
+      <label>Som ambiente <input type="range" id="combat-ambient-volume" min="0" max="100" value="0"></label>
       <label>Vozes <input type="range" id="combat-voice-volume" min="0" max="100" value="62"></label>
       <button class="secondary" type="button" id="combat-audio-demo">Ouvir os impactos</button>
     </div>
   </details>
 </div>
-<div class="actions"><button id="back" type="button" class="secondary">Voltar aos lutadores</button><button id="start" type="button">Iniciar duelo</button></div>
 </section>
 </div>
 <canvas hidden tabindex="0" width="960" height="500" aria-label="Arena de luta para dois jogadores"></canvas>

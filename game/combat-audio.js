@@ -64,9 +64,9 @@ const recordedCombatAudio=(()=>{
   function ambient(){
     if(context?.state!=='running')return;
     const stage=['interno','interno','fazenda','grafica','cofre'][stageIndex];
-    const wanted=mix.value!=='classic' && (phase==='fight' || phase==='countdown')
-      ? (inAdelia() ? 'interno' : stage) : null;
     const level=Number(ambienceVolume.value)*.0032;
+    const wanted=level>0 && mix.value!=='classic' && (phase==='fight' || phase==='countdown')
+      ? (inAdelia() ? 'interno' : stage) : null;
     if(ambientGain && ambientLevel!==level){
       ambientGain.gain.setTargetAtTime(level,context.currentTime,.06);
       ambientLevel=level;

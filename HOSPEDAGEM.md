@@ -1,19 +1,29 @@
-# Arena Milkshake — servidor independente
+# Arena Milkshake
 
-Esta versão inclui o Pedro HD e mantém o protocolo de salas por código. Não precisa de Sites, D1 ou bibliotecas externas. Requer Node.js 24.
+O jogo é servido pelo [Render](https://arena-milkshake.onrender.com/?combat=2) a partir da branch `main` do [repositório no GitHub](https://github.com/petalomeu/arena-milkshake).
 
-## Executar
+## Estrutura local
 
-Execute `node server.mjs`. A porta padrão é 4175; a variável `PORT` configura a porta da hospedagem. O endpoint `/healthz` verifica disponibilidade.
+| Caminho | Função |
+| --- | --- |
+| `game/index.html` | Tela de seleção, controles e interface em HTML e CSS. |
+| `game/game.js` | Luta, CPU, desenho no Canvas 2D, especiais e sincronização online em JavaScript. |
+| `game/combat-v2.js` | Regras de golpes, colisões e energia do Combate 2.0. |
+| `game/combat-audio.js` | Efeitos de combate e ambiente via Web Audio. |
+| `game/combat-art.js` e `game/combat-stance-art.js` | Coordenadas dos quadros nas folhas de sprites. |
+| `game/frames/` | Sprites, retratos e quadros de animação. As arenas e os áudios ficam em `game/`. |
+| `server.mjs` | Servidor HTTP em Node.js 24. Serve o jogo e encaminha os pedidos de sala. |
+| `realtime.mjs` | Conexões WebSocket autenticadas, encaminhamento imediato dos comandos e manutenção da conexão. |
+| `worker/index.js` | Protocolo de criação e entrada nas salas, troca de mensagens e controle de sessão. |
+| `drizzle/0000_rooms.sql` | Tabelas SQLite para salas e mensagens. |
+| `render.yaml` e `prepare-assets.mjs` | Configuração do serviço e extração dos recursos compactados no build público. |
 
-## Render
+## Duelo online
 
-O arquivo `render.yaml` configura um Web Service Node, com início em `node server.mjs`. O pacote de entrega contém todos os arquivos necessários, sem credenciais ou metadados do repositório. Para publicar pela integração, é necessário conectar uma conta Render e disponibilizar a origem do projeto ao serviço.
+O anfitrião simula a luta. Após criar ou entrar na sala pela API HTTP, os navegadores abrem uma conexão WebSocket autenticada. Os comandos são encaminhados imediatamente e o anfitrião envia o estado até 30 vezes por segundo. O tráfego da luta passa diretamente entre as conexões, e o SQLite em memória mantém o cadastro das salas. As salas expiram após duas horas e encerram quando um jogador desconecta.
 
-O serviço usa uma única instância. As salas são temporárias, expiram após duas horas e são apagadas quando o servidor reinicia. Não são contas de usuário ou dados permanentes. Em um plano que suspenda serviços ociosos, a primeira visita pode precisar aguardar a inicialização.
+O indicador mede o tempo de ida e volta até o outro jogador através do servidor. A oscilação usa a variação entre essas amostras. Esse ping inclui o caminho dos dois jogadores. A simulação atual usa previsão visual do convidado e confirmação pelo anfitrião.
 
-## Validação
+## Executar localmente
 
-Testados: carregamento da página e do Pedro HD, cache, isolamento dos arquivos públicos, verificação de origem, criação de sala, entrada do segundo jogador, rejeição de entrada duplicada, mensagens nos dois sentidos, validação de sessão, saída com limpeza e reprodução de áudio por faixas de bytes.
-
-Nenhuma publicação permanente nesta hospedagem foi realizada ainda. A conta Render precisa estar conectada. Os testes com túneis temporários Cloudflare e Pinggy foram bloqueados pela rede deste computador.
+Na pasta do projeto, execute `npm ci` e depois `node server.mjs` com Node.js 24. Abra [Combate 2.0 local](http://127.0.0.1:4175/?combat=2). A variável `PORT` muda a porta e o endpoint `/healthz` verifica a disponibilidade do servidor. Para LAN, os dois jogadores abrem o IPv4 do PC servidor, por exemplo `http://192.168.1.50:4175/?combat=2`, com acesso permitido pelo firewall na rede privada.

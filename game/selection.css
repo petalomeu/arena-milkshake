@@ -1,0 +1,42 @@
+#selection{--selection-border:#4b495b;--selection-bg:#151522;max-width:1380px}
+#network-status{color:#b1efd3;font-size:12px;margin-left:auto;text-align:right}
+#network-status:empty{display:none}
+body:has(#selection:not([hidden])) main{padding-block:clamp(9px,2dvh,20px)}
+body:has(#selection:not([hidden])) header{margin-bottom:9px}
+body:has(#selection:not([hidden])) .connection-bar{margin-bottom:10px;padding-block:7px}
+body:has(#selection:not([hidden])) #room-status{margin:4px 0}
+.match-menu{display:flex;gap:.8rem;align-items:end;flex-wrap:wrap;padding:12px;background:#171725;border:1px solid var(--selection-border);border-radius:10px;margin:12px 0 0}
+.match-modes{display:flex;gap:6px;flex:1 1 auto}
+.match-menu label{display:grid;gap:4px;color:#e6d8ea;font-size:.84rem}
+.match-menu select{padding:.53rem .65rem;background:#222134;color:#fff;border:1px solid #645873;border-radius:5px}
+.match-modes button{white-space:nowrap}
+.match-modes [aria-pressed=true]{background:#e9c26b;color:#170f20;border-color:#e9c26b}
+#selection :focus-visible{outline:3px solid #fff1a3;outline-offset:2px}
+.selection-heading{margin-bottom:10px}
+.player-panel{background:linear-gradient(150deg,#27223b,#151522 55%);border-color:var(--selection-border)}
+.fighter-card{min-height:75px;border-color:#504661}
+.fighter-card img{height:48px}
+.fighter-card[aria-pressed=true]{background:#36284a;border-width:2px}
+.fighter-card:focus-visible{z-index:1}
+.stage-feature{position:relative;display:grid;overflow:hidden;border:1px solid #696079;border-radius:10px;background:#191628;margin-bottom:8px;height:clamp(104px,25dvh,290px)}
+.stage-feature img{width:100%;height:100%;min-height:0;object-fit:cover;object-position:center}
+.stage-feature strong{position:absolute;inset:auto 0 0;padding:24px 18px 12px;background:linear-gradient(transparent,#100c18);font:800 clamp(23px,4vw,43px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;color:#fff3d2}
+.stage-cards{display:grid;grid-auto-flow:column;grid-auto-columns:clamp(120px,calc((100% - 40px)/5),260px);grid-template-columns:none;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;gap:8px;padding:4px 4px 9px;margin-bottom:6px;scrollbar-color:#715685 #21192f}
+.stage-card{scroll-snap-align:center;min-width:0;font-size:clamp(15px,1.6vw,22px);padding:6px}
+.stage-card img{height:clamp(45px,8dvh,85px);margin-bottom:5px}
+.stage-card span{margin:0}
+.combat-settings{margin:8px 0}
+@media(min-width:1101px){
+  .champion-preview{height:clamp(148px,27dvh,250px);min-height:0}
+  .champion-preview img{height:clamp(128px,22dvh,222px)}
+  .fighter-cards{grid-template-columns:repeat(8,minmax(0,1fr))}
+}
+@media(max-width:700px){
+  body:has(#selection:not([hidden]) #stages:not([hidden])) .connection-bar{display:none}
+  .match-menu{gap:8px}.match-modes{flex-basis:100%}.match-modes button{flex:1;white-space:normal}
+  .match-menu label{flex:1;min-width:118px}.stage-feature{height:clamp(92px,19dvh,190px)}
+}
+@media(max-height:700px){
+  .match-menu{padding:8px;margin-top:8px}
+  .stage-feature{height:clamp(85px,20dvh,160px)}.stage-card img{height:46px}
+}

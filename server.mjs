@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { attachRealtime } from './realtime.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const game=join(root,'game');
@@ -35,7 +36,7 @@ const DB={
 const scope=vm.createContext({Response,Request,URL,crypto:webcrypto,console,Date});
 const workerSource=readFileSync(join(root,'worker/index.js'),'utf8').replace('export default {','const arenaWorker = {');
 vm.runInContext(workerSource+'\nthis.roomHandler=arenaWorker.fetch;',scope);
-const media={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.webp':'image/webp','.png':'image/png','.jpg':'image/jpeg','.mp3':'audio/mpeg','.ogg':'audio/ogg','.wav':'audio/wav','.webm':'audio/webm'};
+const media={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.webp':'image/webp','.png':'image/png','.jpg':'image/jpeg','.mp3':'audio/mpeg','.ogg':'audio/ogg','.wav':'audio/wav','.webm':'audio/webm'};
 function error(res,status,message){res.writeHead(status,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});res.end(message);}
 export const server=http.createServer(async(req,res)=>{
   try{
@@ -53,7 +54,7 @@ export const server=http.createServer(async(req,res)=>{
     if(req.method!=='GET' && req.method!=='HEAD'){error(res,405,'Método inválido.');return;}
     const name=decodeURIComponent(url.pathname==='/' ? '/index.html' : url.pathname);
     // Only public game files, never repository files or directory listings.
-    if(!/^\/(?:frames\/)?[^/\\]+\.(html|js|webp|png|jpg|mp3|ogg|wav|webm)$/.test(name)){error(res,404,'Arquivo não encontrado.');return;}
+    if(!/^\/(?:frames\/)?[^/\\]+\.(html|css|js|webp|png|jpg|mp3|ogg|wav|webm)$/.test(name)){error(res,404,'Arquivo não encontrado.');return;}
     const path=resolve(game,'.'+name);
     if(!path.startsWith(game+'/') && !path.startsWith(game+'\\')){error(res,404,'Arquivo não encontrado.');return;}
     const stat=statSync(path);if(!stat.isFile()){error(res,404,'Arquivo não encontrado.');return;}
@@ -73,6 +74,7 @@ export const server=http.createServer(async(req,res)=>{
     console.error('Arena request:',cause.message);if(!res.headersSent)error(res,500,'Erro ao processar a solicitação.');else res.end();
   }
 });
+attachRealtime(server,sqlite);
 if(process.env.ARENA_TEST!=='1'){
   const port=Number(process.env.PORT || 4175),host=process.env.HOST || '0.0.0.0';
   server.listen(port,host,()=>console.log('Arena Milkshake: http://127.0.0.1:'+port));

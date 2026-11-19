@@ -39,7 +39,8 @@ const combat2 = (() => {
   const keyByAction = {left:0,right:1,jump:2,guard:3};
   const activePoseHeight={
     0:{punch1:132,punch2:135,punch3:130,kick1:58,kick2:109,kick3:142},
-    2:{punch1:150,punch2:149,punch3:147,kick1:67,kick2:132,kick3:166}
+    2:{punch1:150,punch2:149,punch3:147,kick1:67,kick2:132,kick3:166},
+    15:{punch1:132,punch2:132,punch3:126}
   };
   const heldCodes = new Map();
   let hostTick=0, accumulated=0, mode=false, menu=false;
@@ -49,15 +50,15 @@ const combat2 = (() => {
   function state() {
     return {move:0,jumps:0,airCut:false,dash:0,dashWait:0,dashCombo:0,direction:0,lastLeft:-99,lastRight:-99,
       crouch:false,block:0,attack:null,buffer:null,chain:0,chainClock:0,escape:0,escapeWait:0,energyNotice:0,
-      emergencyUsed:false,specialStun:0};
+      emergencyUsed:false,specialStun:0,repetition:null};
   }
   function attach() {
     hostTick=0; accumulated=0; heldCodes.clear(); menu=false;
     fighters.forEach(a=>{a.v2=state();a.guardEnergy=energy.reserve;});
   }
-  function awardContact(actor,blocked){
+  function awardContact(actor,blocked,repeated=false){
     const a=fighters[actor.i];
-    if(a?.hp)a.guardEnergy=Math.min(energy.max,a.guardEnergy+(blocked ? energy.blocked : energy.hit));
+    if(a?.hp)a.guardEnergy=Math.min(energy.max,a.guardEnergy+(blocked ? energy.blocked : energy.hit)*(repeated ? .5 : 1));
   }
   function profile(a){return profiles[a.kind];}
   function active(){return online ? !!online.rules2 : mode;}
@@ -110,21 +111,24 @@ const combat2 = (() => {
     const current=a.v2.attack;
     return current?.hit && !current.air && definitions[name].level===definitions[current.name].level+1;
   }
-  function timings(a,name,chaining=false){
+  function timings(a,name,chaining=false,repeated=false){
     const p=profile(a), move=definitions[name];
     const fastMedium=a.kind===10 && name==='punch2' ? 1 : 0;
     const quickLight=(a.kind===11 || a.kind===5) && move.level===1 ? 1 : 0;
     const windup=[2,2,3][move.level-1];
     const settle=[4,5,7][move.level-1];
     return {startup:Math.max(3,move.start+windup-fastMedium-quickLight-(chaining ? 2 : 0)-(a.baby>0 ? 2 : 0)),
-      recovery:Math.max(5,Math.round((move.recover+settle)*p.recovery*(a.baby>0 ? .72 : 1)))};
+      recovery:Math.max(5,Math.round((move.recover+settle)*p.recovery*(a.baby>0 ? .72 : 1)))+(repeated ? 4 : 0)};
   }
   function begin(a,b,name,air=false,dashStrike=false){
     const move=definitions[name];
     const chaining=ladder(a,name);
-    const {startup,recovery}=timings(a,name,chaining);
+    const last=a.v2.repetition;
+    const repeated=last?.name===name && last.count>=2;
+    if(!last || last.name===name)a.v2.repetition={name,count:last ? last.count+1 : 1,ticks:60};
+    const {startup,recovery}=timings(a,name,chaining,repeated);
     if(!chaining){a.v2.chain=0;a.v2.chainClock=0;}
-    a.v2.attack={name,age:0,startup,recovery,used:false,hit:false,air,dashStrike};
+    a.v2.attack={name,age:0,startup,recovery,used:false,hit:false,air,dashStrike,repeated};
     a.v2.buffer=null;
     a.v2.move=0;
     a.v2.dashCombo=0;
@@ -271,7 +275,8 @@ const combat2 = (() => {
           (!a.v2.dash || dashStrike) && !a.nap &&
           (dashStrike || !(a.kind===10 && a.printedTier>=0 && action.startsWith('punch')))){
         const name=moveFromStance(a,action,online.previewCrouch ?? a.v2.crouch);
-        const {startup,recovery}=timings(a,name);
+        const repeat=a.v2.repetition;
+        const {startup,recovery}=timings(a,name,false,repeat?.name===name && repeat.count>=2);
         online.basicPreview={seq,move:{name,age:0,startup,recovery,air:a.y<ground || a.vy<0,dashStrike}};
       }
       if(down && (action==='special1' || action==='special2'))predictAttack(a,Number(action.at(-1)),seq);
@@ -396,9 +401,10 @@ const combat2 = (() => {
     for(const {actor,target,attack,blocked} of contacts){
       const data=definitions[attack.name];
       if(blocked){
+        if(actor.v2.repetition?.name!==attack.name)actor.v2.repetition={name:attack.name,count:1,ticks:60-attack.age};
         const cost=[7,11,16][data.level-1];
         target.guardEnergy=Math.max(0,target.guardEnergy-cost);target.guardDelay=1;
-        awardContact(actor,true);
+        awardContact(actor,true,attack.repeated);
         if(!target.guardEnergy)breakGuard(target);
         else{
           target.v2.block=Math.max(target.v2.block,data.block);
@@ -418,6 +424,7 @@ const combat2 = (() => {
       attack.hit=hit(actor,target,data.damage*comboScale*p.force,
         data.push*force,(data.stun+(data.level<3 ? 1 : 0))*tick,false,false,0,'v2_hit_'+contact,true);
       if(!attack.hit || target.hp===wasHit)continue;
+      if(actor.v2.repetition?.name!==attack.name)actor.v2.repetition={name:attack.name,count:1,ticks:60-attack.age};
       actor.v2.chain++;
       actor.v2.chainClock=60;
       if(attack.dashStrike){
@@ -453,6 +460,7 @@ const combat2 = (() => {
     hostTick++;
     for(const a of fighters){
       const s=a.v2;
+      if(s.repetition && --s.repetition.ticks<=0)s.repetition=null;
       for(const key of ['dash','dashWait','dashCombo','block','chainClock','escapeWait','energyNotice'])s[key]=Math.max(0,s[key]-1);
       if(!s.chainClock)s.chain=0;
       if(cannotAct(a)){s.dash=0;s.dashCombo=0;s.escape=0;s.move=0;}
